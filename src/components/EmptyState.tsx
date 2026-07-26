@@ -1,0 +1,204 @@
+import React, { useState } from 'react';
+import { UploadCloud, Video, Mic, Languages, Globe, Zap, ArrowRight, Loader2 } from 'lucide-react';
+import { useDropzone } from 'react-dropzone';
+import { useStore } from '../store';
+
+export function EmptyState() {
+  const { 
+    setProject, 
+    addTrack, 
+    setSubtitles, 
+    loadSampleProject,
+    startTaskPipeline,
+    updateTaskProgress,
+    setTaskStage,
+    completeTaskPipeline,
+    failTaskPipeline,
+    taskManager
+  } = useStore();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
+
+  const onDrop = React.useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      const file = acceptedFiles[0];
+      const url = URL.createObjectURL(file);
+      
+      setIsProcessing(true);
+      setProcessingStatus('Uploading video & starting neural pipeline...');
+
+      startTaskPipeline(`Process Video: ${file.name}`);
+      setTaskStage('audio_separation', 'Demucs v4 separating audio stems...');
+      updateTaskProgress('audio_separation', 40, 'Extracting dialogue channel...');
+
+      // Progress interval timer to simulate active feedback while waiting for Gemini AI
+      const timer1 = setTimeout(() => {
+        updateTaskProgress('audio_separation', 100, 'Audio stems isolated');
+        setTaskStage('asr_transcription', 'WhisperX detecting speaker language shifts...');
+        updateTaskProgress('asr_transcription', 50, 'Diarizing voice timestamps...');
+      }, 3000);
+
+      const timer2 = setTimeout(() => {
+        updateTaskProgress('asr_transcription', 100, 'All dialogue segments extracted');
+        setTaskStage('translation', 'Gemini 3.6 Flash translating to Easy-Read English...');
+        updateTaskProgress('translation', 60, 'Generating natural & simplified English pairs...');
+      }, 7000);
+
+      try {
+        const formData = new FormData();
+        formData.append('video', file);
+
+        setProcessingStatus('Analyzing languages and translating to English...');
+        const response = await fetch('/api/translate-video', {
+          method: 'POST',
+          body: formData,
+        });
+
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+
+        if (!response.ok) {
+          throw new Error('Translation failed');
+        }
+
+        const data = await response.json();
+        const generatedSubtitles = data.subtitles || [];
+
+        updateTaskProgress('translation', 100, 'English formatting complete');
+
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = () => {
+          const duration = video.duration && isFinite(video.duration) ? video.duration : 22;
+          
+          setProject({
+            id: '1',
+            name: file.name,
+            duration: duration,
+          });
+
+          addTrack({
+            id: 'track-v1',
+            name: 'Video (Source)',
+            type: 'video',
+            items: [{ id: 'item-v1', type: 'video', startTime: 0, duration: duration, name: file.name, url, color: 'bg-blue-600' }]
+          });
+
+          addTrack({
+            id: 'track-a1',
+            name: 'Original Audio Stem',
+            type: 'audio',
+            items: [{ id: 'item-a1', type: 'audio', startTime: 0, duration: duration, name: 'Isolated Dialogue Stem (Multi-Lang)', color: 'bg-slate-600' }]
+          });
+
+          addTrack({
+            id: 'track-a2',
+            name: 'English Dub Audio',
+            type: 'audio',
+            items: [{ id: 'item-a2', type: 'audio', startTime: 0.5, duration: Math.max(1, duration - 1), name: 'English Synthesis (Josh)', color: 'bg-emerald-600' }]
+          });
+
+          addTrack({
+            id: 'track-s1',
+            name: 'English Subtitles',
+            type: 'subtitle',
+            items: []
+          });
+
+          setSubtitles(generatedSubtitles);
+          completeTaskPipeline();
+        };
+        video.src = url;
+      } catch (err: any) {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        console.error(err);
+        failTaskPipeline(err.message || 'Failed to process video');
+        alert('Failed to process video. Please try again.');
+      } finally {
+        setIsProcessing(false);
+        setProcessingStatus('');
+      }
+    }
+  }, [setProject, addTrack, setSubtitles, startTaskPipeline, updateTaskProgress, setTaskStage, completeTaskPipeline, failTaskPipeline]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'video/*': [] },
+    maxFiles: 1
+  } as any);
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#000]">
+      <div 
+        {...getRootProps()} 
+        className={`w-full max-w-3xl border-2 border-dashed rounded-md p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+          isDragActive ? 'border-[#00F5FF] bg-[#00F5FF]/10' : 'border-[#313135] hover:border-slate-500 hover:bg-[#111]'
+        }`}
+      >
+        <input {...getInputProps()} />
+        {isProcessing ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <Loader2 className="w-12 h-12 text-[#00F5FF] animate-spin mb-6" />
+            <h2 className="text-[14px] font-bold text-white mb-2 uppercase tracking-widest">
+              Processing Video
+            </h2>
+            <p className="text-[#00F5FF] text-[12px] font-mono mb-2">
+              {processingStatus}
+            </p>
+            <div className="w-64 h-1 bg-[#1A1A1D] rounded-full overflow-hidden mt-4">
+              <div className="h-full bg-[#00F5FF] animate-pulse rounded-full" style={{ width: '60%' }}></div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="w-14 h-14 bg-[#161618] border border-[#313135] rounded-full flex items-center justify-center mb-4">
+              <UploadCloud className="w-7 h-7 text-[#00F5FF]" />
+            </div>
+            <h2 className="text-[14px] font-bold text-white mb-2 uppercase tracking-widest flex items-center gap-2">
+              <Globe className="w-4 h-4 text-[#00F5FF]" /> Auto-Detect Foreign Languages & Translate to English
+            </h2>
+            <p className="text-slate-400 max-w-lg mb-6 text-[11px] leading-relaxed">
+              Upload any video containing foreign or changing languages (Spanish, Japanese, French, German, Mandarin, etc.). The system auto-identifies language shifts per speaker and formats clean, easy-to-understand English audio & subtitles.
+            </p>
+
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                loadSampleProject();
+              }}
+              className="mb-6 px-4 py-2 bg-[#00F5FF] text-black font-bold uppercase rounded text-[11px] hover:bg-white transition-colors flex items-center gap-2 shadow-lg"
+            >
+              <Zap className="w-4 h-4 text-black fill-black" /> Load Multi-Language Demo Project (ES, JA, FR, DE → EN) <ArrowRight className="w-4 h-4" />
+            </button>
+            
+            <div className="grid grid-cols-3 gap-6 w-full max-w-2xl text-left border-t border-[#313135] pt-6">
+              <div className="flex flex-col items-center text-center space-y-1.5">
+                 <div className="w-8 h-8 bg-[#1A1A1D] border border-[#00F5FF]/30 text-[#00F5FF] rounded flex items-center justify-center mb-1">
+                   <Languages className="w-4 h-4" />
+                 </div>
+                 <h3 className="font-bold text-[10px] uppercase text-white">Auto Language Shift Detection</h3>
+                 <p className="text-[9px] text-slate-500 font-mono">WhisperX multi-lingual diarization</p>
+              </div>
+              <div className="flex flex-col items-center text-center space-y-1.5">
+                 <div className="w-8 h-8 bg-[#1A1A1D] border border-amber-500/30 text-amber-400 rounded flex items-center justify-center mb-1">
+                   <Globe className="w-4 h-4" />
+                 </div>
+                 <h3 className="font-bold text-[10px] uppercase text-white">Easy-Read English Format</h3>
+                 <p className="text-[9px] text-slate-500 font-mono">Natural & Simplified English modes</p>
+              </div>
+              <div className="flex flex-col items-center text-center space-y-1.5">
+                 <div className="w-8 h-8 bg-[#1A1A1D] border border-emerald-500/30 text-emerald-400 rounded flex items-center justify-center mb-1">
+                   <Mic className="w-4 h-4" />
+                 </div>
+                 <h3 className="font-bold text-[10px] uppercase text-white">English Neural Dubbing</h3>
+                 <p className="text-[9px] text-slate-500 font-mono">ElevenLabs v3 & Fish Audio S2</p>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

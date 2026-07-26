@@ -1,0 +1,9 @@
+{
+  "name": "NeuralDub Pro",
+  "description": "Professional video dubbing and translation pipeline for automatically identifying changing source languages and translating them into easy-to-understand English formats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
+
