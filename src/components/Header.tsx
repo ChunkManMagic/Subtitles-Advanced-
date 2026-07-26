@@ -87,9 +87,8 @@ export function Header() {
                 style={{ width: `${overallProgress}%` }}
               />
 
-              {/* Stage Dividers (33% and 66%) */}
-              <div className="absolute top-0 bottom-0 left-[33.3%] w-0.5 bg-[#161618]"></div>
-              <div className="absolute top-0 bottom-0 left-[66.6%] w-0.5 bg-[#161618]"></div>
+              {/* Stage Divider (50%) */}
+              <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-[#161618]"></div>
             </div>
           </div>
         </div>
@@ -156,44 +155,8 @@ export function Header() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Stage 1: Audio Separation */}
-            <div className={cn(
-              "p-2.5 rounded border transition-colors flex flex-col gap-1.5",
-              stages.audio_separation.status === 'in_progress' ? "bg-[#00F5FF]/5 border-[#00F5FF]/50" :
-              stages.audio_separation.status === 'completed' ? "bg-emerald-950/20 border-emerald-500/30" :
-              "bg-[#141416] border-[#26262a]"
-            )}>
-              <div className="flex items-center justify-between text-[10px]">
-                <div className="flex items-center gap-1.5 font-bold uppercase text-white">
-                  <Music className="w-3.5 h-3.5 text-[#00F5FF]" />
-                  <span>1. Audio Separation</span>
-                </div>
-                {stages.audio_separation.status === 'completed' ? (
-                  <span className="flex items-center text-emerald-400 text-[9px] font-mono gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> 100%
-                  </span>
-                ) : stages.audio_separation.status === 'in_progress' ? (
-                  <span className="flex items-center text-[#00F5FF] text-[9px] font-mono gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> {stages.audio_separation.progress}%
-                  </span>
-                ) : (
-                  <span className="text-slate-500 text-[9px] font-mono">Pending</span>
-                )}
-              </div>
-              <div className="text-[9px] text-slate-400 font-mono">Demucs v4 Stem Separation</div>
-              <p className="text-[9px] text-slate-500 leading-tight">
-                {stages.audio_separation.detail}
-              </p>
-              <div className="w-full bg-[#000] h-1 rounded overflow-hidden mt-1">
-                <div 
-                  className={cn("h-full transition-all", stages.audio_separation.status === 'completed' ? "bg-emerald-400" : "bg-[#00F5FF]")} 
-                  style={{ width: `${stages.audio_separation.progress}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Stage 2: ASR Transcription */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Stage 1: ASR Transcription */}
             <div className={cn(
               "p-2.5 rounded border transition-colors flex flex-col gap-1.5",
               stages.asr_transcription.status === 'in_progress' ? "bg-[#00F5FF]/5 border-[#00F5FF]/50" :
@@ -203,7 +166,7 @@ export function Header() {
               <div className="flex items-center justify-between text-[10px]">
                 <div className="flex items-center gap-1.5 font-bold uppercase text-white">
                   <Languages className="w-3.5 h-3.5 text-amber-400" />
-                  <span>2. ASR Transcription</span>
+                  <span>1. ASR Transcription</span>
                 </div>
                 {stages.asr_transcription.status === 'completed' ? (
                   <span className="flex items-center text-emerald-400 text-[9px] font-mono gap-1">
@@ -229,7 +192,7 @@ export function Header() {
               </div>
             </div>
 
-            {/* Stage 3: Translation to English */}
+            {/* Stage 2: Translation to English */}
             <div className={cn(
               "p-2.5 rounded border transition-colors flex flex-col gap-1.5",
               stages.translation.status === 'in_progress' ? "bg-[#00F5FF]/5 border-[#00F5FF]/50" :
@@ -239,7 +202,7 @@ export function Header() {
               <div className="flex items-center justify-between text-[10px]">
                 <div className="flex items-center gap-1.5 font-bold uppercase text-white">
                   <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>3. English Translation</span>
+                  <span>2. English Translation</span>
                 </div>
                 {stages.translation.status === 'completed' ? (
                   <span className="flex items-center text-emerald-400 text-[9px] font-mono gap-1">

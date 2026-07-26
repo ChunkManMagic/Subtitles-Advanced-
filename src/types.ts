@@ -55,10 +55,10 @@ export interface Subtitle {
   languageShift?: boolean; // True if source language changed from preceding segment
 }
 
-export type ProcessStage = 'idle' | 'audio_separation' | 'asr_transcription' | 'translation' | 'completed' | 'error';
+export type ProcessStage = 'idle' | 'asr_transcription' | 'translation' | 'completed' | 'error';
 
 export interface StageStatus {
-  id: 'audio_separation' | 'asr_transcription' | 'translation';
+  id: 'asr_transcription' | 'translation';
   name: string;
   progress: number; // 0 - 100
   status: 'pending' | 'in_progress' | 'completed' | 'error';
@@ -72,7 +72,6 @@ export interface TaskManagerState {
   overallProgress: number; // 0 - 100
   statusMessage: string;
   stages: {
-    audio_separation: StageStatus;
     asr_transcription: StageStatus;
     translation: StageStatus;
   };
@@ -107,7 +106,7 @@ export interface AppState {
   clearProject: () => void;
   
   // Task Manager Actions
-  updateTaskProgress: (stage: 'audio_separation' | 'asr_transcription' | 'translation', progress: number, detail?: string) => void;
+  updateTaskProgress: (stage: 'asr_transcription' | 'translation', progress: number, detail?: string) => void;
   setTaskStage: (stage: ProcessStage, statusMessage?: string) => void;
   startTaskPipeline: (taskName?: string) => void;
   completeTaskPipeline: () => void;
