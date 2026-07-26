@@ -28,21 +28,15 @@ export function EmptyState() {
       setProcessingStatus('Uploading video & starting neural pipeline...');
 
       startTaskPipeline(`Process Video: ${file.name}`);
-      setTaskStage('audio_separation', 'Demucs v4 separating audio stems...');
-      updateTaskProgress('audio_separation', 40, 'Extracting dialogue channel...');
+      setTaskStage('asr_transcription', 'WhisperX detecting speaker language shifts...');
+      updateTaskProgress('asr_transcription', 40, 'Diarizing voice timestamps...');
 
       // Progress interval timer to simulate active feedback while waiting for Gemini AI
       const timer1 = setTimeout(() => {
-        updateTaskProgress('audio_separation', 100, 'Audio stems isolated');
-        setTaskStage('asr_transcription', 'WhisperX detecting speaker language shifts...');
-        updateTaskProgress('asr_transcription', 50, 'Diarizing voice timestamps...');
-      }, 3000);
-
-      const timer2 = setTimeout(() => {
         updateTaskProgress('asr_transcription', 100, 'All dialogue segments extracted');
         setTaskStage('translation', 'Gemini 3.6 Flash translating to Easy-Read English...');
-        updateTaskProgress('translation', 60, 'Generating natural & simplified English pairs...');
-      }, 7000);
+        updateTaskProgress('translation', 50, 'Generating natural & simplified English pairs...');
+      }, 4000);
 
       try {
         const formData = new FormData();
@@ -55,7 +49,6 @@ export function EmptyState() {
         });
 
         clearTimeout(timer1);
-        clearTimeout(timer2);
 
         if (!response.ok) {
           throw new Error('Translation failed');
@@ -85,20 +78,6 @@ export function EmptyState() {
           });
 
           addTrack({
-            id: 'track-a1',
-            name: 'Original Audio Stem',
-            type: 'audio',
-            items: [{ id: 'item-a1', type: 'audio', startTime: 0, duration: duration, name: 'Isolated Dialogue Stem (Multi-Lang)', color: 'bg-slate-600' }]
-          });
-
-          addTrack({
-            id: 'track-a2',
-            name: 'English Dub Audio',
-            type: 'audio',
-            items: [{ id: 'item-a2', type: 'audio', startTime: 0.5, duration: Math.max(1, duration - 1), name: 'English Synthesis (Josh)', color: 'bg-emerald-600' }]
-          });
-
-          addTrack({
             id: 'track-s1',
             name: 'English Subtitles',
             type: 'subtitle',
@@ -111,7 +90,6 @@ export function EmptyState() {
         video.src = url;
       } catch (err: any) {
         clearTimeout(timer1);
-        clearTimeout(timer2);
         console.error(err);
         failTaskPipeline(err.message || 'Failed to process video');
         alert('Failed to process video. Please try again.');
@@ -190,10 +168,10 @@ export function EmptyState() {
               </div>
               <div className="flex flex-col items-center text-center space-y-1.5">
                  <div className="w-8 h-8 bg-[#1A1A1D] border border-emerald-500/30 text-emerald-400 rounded flex items-center justify-center mb-1">
-                   <Mic className="w-4 h-4" />
+                   <Video className="w-4 h-4" />
                  </div>
-                 <h3 className="font-bold text-[10px] uppercase text-white">English Neural Dubbing</h3>
-                 <p className="text-[9px] text-slate-500 font-mono">ElevenLabs v3 & Fish Audio S2</p>
+                 <h3 className="font-bold text-[10px] uppercase text-white">Interactive Timeline</h3>
+                 <p className="text-[9px] text-slate-500 font-mono">Precision subtitle editing & alignment</p>
               </div>
             </div>
           </>

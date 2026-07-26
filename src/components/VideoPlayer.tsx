@@ -77,7 +77,7 @@ export function VideoPlayer() {
           <div className="absolute top-3 left-3 flex gap-2">
             <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">Live Proxy</span>
             <span className="bg-black/80 text-[#00F5FF] border border-[#313135] px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1">
-              <Globe className="w-2.5 h-2.5" /> 🇺🇸 ENGLISH DUBBED
+              <Globe className="w-2.5 h-2.5" /> 🇺🇸 ENGLISH SUBTITLED
             </span>
           </div>
 
@@ -128,7 +128,7 @@ export function VideoPlayer() {
             onClick={togglePlay}
           >
             {isPlaying ? <Pause className="w-3 h-3 text-[#00F5FF]" /> : <Play className="w-3 h-3 text-[#00F5FF]" />}
-            {isPlaying ? 'Pause' : 'Play English Audio'}
+            {isPlaying ? 'Pause' : 'Play Video'}
           </button>
           <button 
             className="text-slate-400 hover:text-white transition-colors p-1.5"
@@ -144,7 +144,7 @@ export function VideoPlayer() {
         </div>
 
         <div className="flex items-center space-x-3 text-slate-400 text-[10px]">
-          <span className="font-mono text-slate-500 uppercase">English Synth: ElevenLabs Josh</span>
+          <span className="font-mono text-slate-500 uppercase">Video Audio: Original Sound</span>
           <button 
             className="hover:text-white transition-colors"
             onClick={() => {

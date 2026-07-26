@@ -3,18 +3,11 @@ import { AppState, Project, Track, TranslationSettings, Subtitle, TaskManagerSta
 
 const INITIAL_TASK_MANAGER: TaskManagerState = {
   isProcessing: false,
-  activeTaskName: 'Neural Dubbing Pipeline',
+  activeTaskName: 'Neural Translation Pipeline',
   currentStage: 'idle',
   overallProgress: 0,
   statusMessage: 'Ready',
   stages: {
-    audio_separation: {
-      id: 'audio_separation',
-      name: 'Audio Separation',
-      progress: 0,
-      status: 'pending',
-      detail: 'Demucs v4 Stem Separation'
-    },
     asr_transcription: {
       id: 'asr_transcription',
       name: 'ASR Transcription',
@@ -117,34 +110,6 @@ const SAMPLE_TRACKS: Track[] = [
     ]
   },
   {
-    id: 'track-a1',
-    name: 'Original Dialogue Stem',
-    type: 'audio',
-    items: [
-      {
-        id: 'item-a1',
-        type: 'audio',
-        startTime: 0,
-        duration: 22,
-        name: 'Isolated Dialogue Stem (Demucs v4)'
-      }
-    ]
-  },
-  {
-    id: 'track-a2',
-    name: 'English Dub Audio',
-    type: 'audio',
-    items: [
-      {
-        id: 'item-a2',
-        type: 'audio',
-        startTime: 0.5,
-        duration: 18,
-        name: 'English Dub (Josh - ElevenLabs v3)'
-      }
-    ]
-  },
-  {
     id: 'track-s1',
     name: 'English Subtitles',
     type: 'subtitle',
@@ -199,27 +164,20 @@ export const useStore = create<AppState>((set, get) => ({
   })),
   setSubtitles: (subtitles) => set({ subtitles }),
 
-  startTaskPipeline: (taskName = 'Neural Dubbing Pipeline') => {
+  startTaskPipeline: (taskName = 'Neural Translation Pipeline') => {
     set({
       taskManager: {
         isProcessing: true,
         activeTaskName: taskName,
-        currentStage: 'audio_separation',
+        currentStage: 'asr_transcription',
         overallProgress: 5,
-        statusMessage: 'Step 1/3: Audio Separation (Demucs v4) isolating voice stems...',
+        statusMessage: 'Step 1/2: WhisperX detecting spoken foreign languages...',
         stages: {
-          audio_separation: {
-            id: 'audio_separation',
-            name: 'Audio Separation',
-            progress: 10,
-            status: 'in_progress',
-            detail: 'Demucs v4 vocal stem isolation'
-          },
           asr_transcription: {
             id: 'asr_transcription',
             name: 'ASR Transcription',
-            progress: 0,
-            status: 'pending',
+            progress: 10,
+            status: 'in_progress',
             detail: 'WhisperX Multi-Lingual Diarization'
           },
           translation: {
@@ -247,11 +205,10 @@ export const useStore = create<AppState>((set, get) => ({
         };
       }
 
-      // Calculate overall progress (Audio Sep: 33%, ASR: 33%, Trans: 34%)
-      const p1 = updatedStages.audio_separation.progress;
-      const p2 = updatedStages.asr_transcription.progress;
-      const p3 = updatedStages.translation.progress;
-      const overall = Math.min(99, Math.round((p1 * 0.33) + (p2 * 0.33) + (p3 * 0.34)));
+      // Calculate overall progress (ASR: 50%, Trans: 50%)
+      const p1 = updatedStages.asr_transcription.progress;
+      const p2 = updatedStages.translation.progress;
+      const overall = Math.min(99, Math.round((p1 * 0.5) + (p2 * 0.5)));
 
       return {
         taskManager: {
@@ -267,15 +224,9 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const updatedStages = { ...state.taskManager.stages };
       
-      if (stage === 'audio_separation') {
-        updatedStages.audio_separation.status = 'in_progress';
-      } else if (stage === 'asr_transcription') {
-        updatedStages.audio_separation.status = 'completed';
-        updatedStages.audio_separation.progress = 100;
+      if (stage === 'asr_transcription') {
         updatedStages.asr_transcription.status = 'in_progress';
       } else if (stage === 'translation') {
-        updatedStages.audio_separation.status = 'completed';
-        updatedStages.audio_separation.progress = 100;
         updatedStages.asr_transcription.status = 'completed';
         updatedStages.asr_transcription.progress = 100;
         updatedStages.translation.status = 'in_progress';
@@ -283,9 +234,8 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Overall baseline per stage
       let stageProgress = state.taskManager.overallProgress;
-      if (stage === 'audio_separation') stageProgress = Math.max(stageProgress, 10);
-      if (stage === 'asr_transcription') stageProgress = Math.max(stageProgress, 35);
-      if (stage === 'translation') stageProgress = Math.max(stageProgress, 68);
+      if (stage === 'asr_transcription') stageProgress = Math.max(stageProgress, 10);
+      if (stage === 'translation') stageProgress = Math.max(stageProgress, 50);
 
       return {
         taskManager: {
@@ -306,9 +256,8 @@ export const useStore = create<AppState>((set, get) => ({
         isProcessing: false,
         currentStage: 'completed',
         overallProgress: 100,
-        statusMessage: 'Pipeline Complete: All languages auto-detected & converted to English',
+        statusMessage: 'Pipeline Complete: All foreign subtitles converted to English',
         stages: {
-          audio_separation: { ...state.taskManager.stages.audio_separation, progress: 100, status: 'completed' },
           asr_transcription: { ...state.taskManager.stages.asr_transcription, progress: 100, status: 'completed' },
           translation: { ...state.taskManager.stages.translation, progress: 100, status: 'completed' }
         }
@@ -317,22 +266,25 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   failTaskPipeline: (errorMessage) => {
-    set((state) => ({
-      taskManager: {
-        ...state.taskManager,
-        isProcessing: false,
-        currentStage: 'error',
-        statusMessage: `Pipeline Error: ${errorMessage}`,
-        stages: {
-          ...state.taskManager.stages,
-          [state.taskManager.currentStage === 'idle' ? 'audio_separation' : state.taskManager.currentStage]: {
-            ...state.taskManager.stages[state.taskManager.currentStage === 'idle' || state.taskManager.currentStage === 'completed' || state.taskManager.currentStage === 'error' ? 'audio_separation' : state.taskManager.currentStage],
-            status: 'error',
-            detail: errorMessage
+    set((state) => {
+      const activeStage = state.taskManager.currentStage === 'idle' || state.taskManager.currentStage === 'completed' || state.taskManager.currentStage === 'error' ? 'asr_transcription' : state.taskManager.currentStage;
+      return {
+        taskManager: {
+          ...state.taskManager,
+          isProcessing: false,
+          currentStage: 'error',
+          statusMessage: `Pipeline Error: ${errorMessage}`,
+          stages: {
+            ...state.taskManager.stages,
+            [activeStage]: {
+              ...state.taskManager.stages[activeStage],
+              status: 'error',
+              detail: errorMessage
+            }
           }
         }
-      }
-    }));
+      };
+    });
   },
 
   resetTaskManager: () => {
@@ -342,38 +294,32 @@ export const useStore = create<AppState>((set, get) => ({
   rescanAndTranslateToEnglish: () => {
     set({ isScanningLanguages: true });
     get().startTaskPipeline('Auto-Detect Languages & Translate to English');
-    get().setTaskStage('audio_separation', 'Demucs v4 extracting audio channels & speech stems...');
-    get().updateTaskProgress('audio_separation', 60, 'Demucs v4 isolating dialogue...');
+    get().setTaskStage('asr_transcription', 'WhisperX detecting speaker language shifts (ES, JA, FR, DE)...');
+    get().updateTaskProgress('asr_transcription', 60, 'Diarizing multi-lingual audio channels...');
 
     setTimeout(() => {
-      get().updateTaskProgress('audio_separation', 100, 'Speech stems isolated');
-      get().setTaskStage('asr_transcription', 'WhisperX detecting speaker language shifts (ES, JA, FR, DE)...');
-      get().updateTaskProgress('asr_transcription', 70, 'Diarizing multi-lingual audio channels...');
+      get().updateTaskProgress('asr_transcription', 100, 'All speaker shifts identified');
+      get().setTaskStage('translation', 'Gemini 3.6 Flash formatting subtitles into Easy-Read English...');
+      get().updateTaskProgress('translation', 80, 'Generating natural & simplified English pairs...');
 
       setTimeout(() => {
-        get().updateTaskProgress('asr_transcription', 100, 'All speaker shifts identified');
-        get().setTaskStage('translation', 'Gemini 3.6 Flash formatting subtitles into Easy-Read English...');
-        get().updateTaskProgress('translation', 80, 'Generating natural & simplified English pairs...');
-
-        setTimeout(() => {
-          get().updateTaskProgress('translation', 100, 'Subtitles & dubs aligned');
-          set((state) => ({
-            isScanningLanguages: false,
-            subtitles: state.subtitles.map(sub => {
-              const len = sub.translatedText.length;
-              const duration = Math.max(1, sub.endTime - sub.startTime);
-              const cps = parseFloat((len / duration).toFixed(1));
-              return {
-                ...sub,
-                cps,
-                readingDifficulty: cps > 20 ? 'Complex' : 'Easy'
-              };
-            })
-          }));
-          get().completeTaskPipeline();
-        }, 500);
-      }, 500);
-    }, 500);
+        get().updateTaskProgress('translation', 100, 'Subtitles aligned');
+        set((state) => ({
+          isScanningLanguages: false,
+          subtitles: state.subtitles.map(sub => {
+            const len = sub.translatedText.length;
+            const duration = Math.max(1, sub.endTime - sub.startTime);
+            const cps = parseFloat((len / duration).toFixed(1));
+            return {
+              ...sub,
+              cps,
+              readingDifficulty: cps > 20 ? 'Complex' : 'Easy'
+            };
+          })
+        }));
+        get().completeTaskPipeline();
+      }, 750);
+    }, 750);
   },
 
   loadSampleProject: () => {

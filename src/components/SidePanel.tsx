@@ -223,47 +223,6 @@ export function SidePanel() {
               </p>
             </div>
 
-            {/* TTS Synthesizer Settings */}
-            <div className="bg-[#161618] p-3 rounded border border-[#313135] space-y-3">
-              <div className="text-[10px] uppercase font-bold text-slate-400">ENGLISH VOICE SYNTHESIS (TTS)</div>
-              
-              <select 
-                value={translationSettings.ttsProvider}
-                onChange={(e) => updateTranslationSettings({ ttsProvider: e.target.value as any })}
-                className="w-full bg-[#000] border border-[#313135] rounded py-1 px-2 text-[10px] text-white focus:outline-none focus:border-[#00F5FF]"
-              >
-                <option value="elevenlabs">ElevenLabs v3 (High Quality)</option>
-                <option value="fishaudio">Fish Audio S2 (Multilingual Open Engine)</option>
-              </select>
-
-              <select 
-                value={translationSettings.ttsVoice}
-                onChange={(e) => updateTranslationSettings({ ttsVoice: e.target.value })}
-                className="w-full bg-[#000] border border-[#313135] rounded py-1 px-2 text-[10px] text-white focus:outline-none focus:border-[#00F5FF]"
-              >
-                <option value="josh">Josh (Deep & Clear US Male)</option>
-                <option value="rachel">Rachel (Warm & Natural US Female)</option>
-                <option value="adam">Adam (Professional British Male)</option>
-                <option value="bella">Bella (Expressive Global Female)</option>
-              </select>
-            </div>
-
-            {/* Lip Sync Engine */}
-            <div className="bg-[#161618] p-3 rounded border border-[#313135] space-y-2">
-              <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between">
-                <span>Generative Lip-Sync to English Audio</span>
-                <span className="bg-[#00F5FF]/20 text-[#00F5FF] text-[8px] px-1 rounded font-bold">GAN/Latent</span>
-              </div>
-              <select 
-                value={translationSettings.lipSyncEngine}
-                onChange={(e) => updateTranslationSettings({ lipSyncEngine: e.target.value as any })}
-                className="w-full bg-[#000] border border-[#313135] rounded py-1 px-2 text-[10px] text-white focus:outline-none focus:border-[#00F5FF]"
-              >
-                <option value="synclabs">Sync Labs lipsync-2-pro (Studio Quality)</option>
-                <option value="musetalk">Tencent MuseTalk 1.5 (Real-Time 30+ FPS)</option>
-                <option value="none">Disabled (Audio & Subtitles Only)</option>
-              </select>
-            </div>
           </div>
         )}
       </div>
