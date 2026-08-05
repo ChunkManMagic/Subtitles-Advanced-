@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { Play, Pause, Volume2, VolumeX, Globe, Maximize, RotateCcw, Film } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -13,14 +14,18 @@ export function VideoPlayer() {
     setIsPlaying,
     currentTime,
     setCurrentTime,
-    currentProject,
+    project,
+    tracks,
+    subtitleStyleSettings,
   } = useStore((state) => ({
     subtitles: state.subtitles,
     isPlaying: state.taskManager.isProcessing ? false : state.isPlaying,
     setIsPlaying: state.setIsPlaying,
     currentTime: state.currentTime,
     setCurrentTime: state.setCurrentTime,
-    currentProject: state.currentProject,
+    project: state.project,
+    tracks: state.tracks,
+    subtitleStyleSettings: state.subtitleStyleSettings,
   }));
 
   const [localIsPlaying, setLocalIsPlaying] = useState(false);
@@ -158,13 +163,16 @@ export function VideoPlayer() {
     }
   };
 
+  const videoTrack = tracks.find(t => t.type === 'video');
+  const videoUrl = videoTrack?.items[0]?.url || (project as any)?.videoUrl;
+
   return (
     <div className="relative w-full aspect-video bg-[#050507] rounded-xl overflow-hidden group shadow-2xl border border-white/5 flex flex-col justify-center items-center">
       {/* Video Stream Element */}
-      {currentProject?.videoUrl ? (
+      {videoUrl ? (
         <video
           ref={videoRef}
-          src={currentProject.videoUrl}
+          src={videoUrl}
           className="w-full h-full object-contain"
           playsInline
           onClick={togglePlay}
@@ -186,14 +194,46 @@ export function VideoPlayer() {
         </span>
       </div>
 
-      {/* 60fps Active Subtitle Overlay - Rendered dynamically over video viewports */}
-      <div className="absolute left-6 right-6 bottom-16 flex justify-center pointer-events-none z-20 transition-all duration-150">
-        {activeSubtitle && (
-          <div className="px-5 py-2.5 rounded-xl bg-black/85 border border-white/15 text-white text-center text-sm md:text-base font-medium font-sans leading-snug max-w-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] tracking-wide">
+      {/* 60fps Active Subtitle Overlay - Rendered dynamically over video viewports with custom placement */}
+      {activeSubtitle && (
+        <div 
+          className="absolute pointer-events-none z-20 transition-all duration-150 max-w-[85%]"
+          style={{
+            top: `${subtitleStyleSettings.yOffsetPercent}%`,
+            left: `${subtitleStyleSettings.xOffsetPercent}%`,
+            transform: 'translate(-50%, -50%)',
+            textAlign: subtitleStyleSettings.alignment,
+          }}
+        >
+          <div 
+            className={cn(
+              "px-4 py-2 rounded-xl font-medium leading-snug tracking-wide transition-all",
+              subtitleStyleSettings.fontSize === 'small' && "text-xs md:text-sm",
+              subtitleStyleSettings.fontSize === 'medium' && "text-sm md:text-base",
+              subtitleStyleSettings.fontSize === 'large' && "text-base md:text-lg",
+              subtitleStyleSettings.fontSize === 'xlarge' && "text-lg md:text-xl font-bold",
+              
+              subtitleStyleSettings.bgStyle === 'yellow_box' 
+                ? "bg-yellow-400 text-black border border-yellow-500 font-bold shadow-xl"
+                : subtitleStyleSettings.bgStyle === 'solid_black'
+                ? "bg-black border border-zinc-800 shadow-xl"
+                : subtitleStyleSettings.bgStyle === 'text_shadow'
+                ? "bg-transparent drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]"
+                : subtitleStyleSettings.bgStyle === 'transparent'
+                ? "bg-black/40 backdrop-blur-sm border border-white/10"
+                : "bg-black/85 border border-[#00F5FF]/40 shadow-[0_0_20px_rgba(0,245,255,0.15)]",
+
+              subtitleStyleSettings.bgStyle !== 'yellow_box' && (
+                subtitleStyleSettings.textColor === 'yellow' ? "text-yellow-300" :
+                subtitleStyleSettings.textColor === 'cyan' ? "text-[#00F5FF]" :
+                subtitleStyleSettings.textColor === 'lime' ? "text-emerald-400" : "text-white"
+              )
+            )}
+          >
             {activeSubtitle}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Custom Control Overlay Panel */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300 flex flex-col gap-3 z-30">
