@@ -28,6 +28,22 @@ export interface Track {
 
 export type EnglishStyle = 'natural' | 'simple' | 'literal' | 'contextual';
 
+export type SubtitlePosition = 'bottom' | 'top' | 'middle' | 'custom';
+export type SubtitleAlignment = 'center' | 'left' | 'right';
+export type SubtitleFontSize = 'small' | 'medium' | 'large' | 'xlarge';
+export type SubtitleBgStyle = 'dark_glass' | 'solid_black' | 'yellow_box' | 'text_shadow' | 'transparent';
+export type SubtitleTextColor = 'yellow' | 'white' | 'cyan' | 'lime';
+
+export interface SubtitleStyleSettings {
+  position: SubtitlePosition;
+  yOffsetPercent: number; // 5 to 95 (default 85 for bottom)
+  xOffsetPercent: number; // 5 to 95 (default 50 for center)
+  alignment: SubtitleAlignment;
+  fontSize: SubtitleFontSize;
+  bgStyle: SubtitleBgStyle;
+  textColor: SubtitleTextColor;
+}
+
 export interface TranslationSettings {
   targetLanguage: 'en';
   englishStyle: EnglishStyle;
@@ -85,6 +101,7 @@ export interface AppState {
   zoom: number;
   selectedItemId: string | null;
   translationSettings: TranslationSettings;
+  subtitleStyleSettings: SubtitleStyleSettings;
   subtitles: Subtitle[];
   isScanningLanguages: boolean;
   taskManager: TaskManagerState;
@@ -99,9 +116,13 @@ export interface AppState {
   setZoom: (zoom: number) => void;
   setSelectedItemId: (id: string | null) => void;
   updateTranslationSettings: (settings: Partial<TranslationSettings>) => void;
+  updateSubtitleStyleSettings: (settings: Partial<SubtitleStyleSettings>) => void;
   updateSubtitle: (id: string, data: Partial<Subtitle>) => void;
+  addSubtitleCue: () => void;
+  deleteSubtitleCue: (id: string) => void;
   setSubtitles: (subtitles: Subtitle[]) => void;
   rescanAndTranslateToEnglish: () => void;
+  loadHistoryProject: (item: { videoId: string; fileName: string; subtitles: Subtitle[] }) => void;
   loadSampleProject: () => void;
   clearProject: () => void;
   

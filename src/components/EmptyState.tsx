@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { UploadCloud, Video, Mic, Languages, Globe, Zap, ArrowRight, Loader2 } from 'lucide-react';
+import { UploadCloud, Video, Mic, Languages, Globe, Zap, ArrowRight, Loader2, History } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { useStore } from '../store';
+import { uploadAndTranslateVideo } from '../lib/uploadVideo';
+import { HistoryModal } from './HistoryModal';
 
 export function EmptyState() {
   const { 
@@ -18,6 +20,7 @@ export function EmptyState() {
   } = useStore();
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const onDrop = React.useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -39,23 +42,13 @@ export function EmptyState() {
       }, 4000);
 
       try {
-        const formData = new FormData();
-        formData.append('video', file);
-
         setProcessingStatus('Analyzing languages and translating to English...');
-        const response = await fetch('/api/translate-video', {
-          method: 'POST',
-          body: formData,
+        
+        const generatedSubtitles = await uploadAndTranslateVideo(file, file.name, (pct) => {
+          updateTaskProgress('asr_transcription', pct, `Uploading & assembling video chunks (${pct}%)...`);
         });
 
         clearTimeout(timer1);
-
-        if (!response.ok) {
-          throw new Error('Translation failed');
-        }
-
-        const data = await response.json();
-        const generatedSubtitles = data.subtitles || [];
 
         updateTaskProgress('translation', 100, 'English formatting complete');
 
@@ -74,7 +67,7 @@ export function EmptyState() {
             id: 'track-v1',
             name: 'Video (Source)',
             type: 'video',
-            items: [{ id: 'item-v1', type: 'video', startTime: 0, duration: duration, name: file.name, url, color: 'bg-blue-600' }]
+            items: [{ id: 'item-v1', type: 'video', startTime: 0, duration: duration, name: file.name, url, file, color: 'bg-blue-600' }]
           });
 
           addTrack({
@@ -140,16 +133,29 @@ export function EmptyState() {
               Upload any video containing foreign or changing languages (Spanish, Japanese, French, German, Mandarin, etc.). The system auto-identifies language shifts per speaker and formats clean, easy-to-understand English audio & subtitles.
             </p>
 
-            <button 
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                loadSampleProject();
-              }}
-              className="mb-6 px-4 py-2 bg-[#00F5FF] text-black font-bold uppercase rounded text-[11px] hover:bg-white transition-colors flex items-center gap-2 shadow-lg"
-            >
-              <Zap className="w-4 h-4 text-black fill-black" /> Load Multi-Language Demo Project (ES, JA, FR, DE → EN) <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  loadSampleProject();
+                }}
+                className="px-4 py-2 bg-[#00F5FF] text-black font-bold uppercase rounded text-[11px] hover:bg-white transition-colors flex items-center gap-2 shadow-lg"
+              >
+                <Zap className="w-4 h-4 text-black fill-black" /> Load Multi-Language Demo Project (ES, JA, FR, DE → EN) <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowHistoryModal(true);
+                }}
+                className="px-4 py-2 bg-[#1A1A1D] border border-[#00F5FF]/40 text-[#00F5FF] font-bold uppercase rounded text-[11px] hover:bg-[#00F5FF]/10 transition-colors flex items-center gap-2"
+              >
+                <History className="w-4 h-4" /> View Past Uploads & History
+              </button>
+            </div>
             
             <div className="grid grid-cols-3 gap-6 w-full max-w-2xl text-left border-t border-[#313135] pt-6">
               <div className="flex flex-col items-center text-center space-y-1.5">
@@ -177,6 +183,7 @@ export function EmptyState() {
           </>
         )}
       </div>
+      <HistoryModal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} />
     </div>
   );
 }

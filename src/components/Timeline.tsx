@@ -3,6 +3,8 @@ import { Video, Mic, Subtitles, Plus, ZoomIn, ZoomOut, Scissors, Copy, Trash2, L
 import { useStore } from '../store';
 import { cn } from '../lib/utils';
 
+import { AudioWaveformVisualizer } from './AudioWaveformVisualizer';
+
 export function Timeline() {
   const { tracks, zoom, setZoom, currentTime, setCurrentTime, project, subtitles, translationSettings } = useStore();
   const timelineRef = React.useRef<HTMLDivElement>(null);
@@ -154,6 +156,12 @@ export function Timeline() {
                 })}
               </div>
             ))}
+          </div>
+          
+          <div className="mt-4 px-2 mb-4" style={{ width: Math.max(duration * pixelsPerSecond, 800) }}>
+            <AudioWaveformVisualizer 
+              audioUrl={tracks.find(t => t.type === 'video' || t.type === 'audio')?.items[0]?.url}
+            />
           </div>
         </div>
       </div>
