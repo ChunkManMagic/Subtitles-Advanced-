@@ -148,8 +148,7 @@ Use this TypeScript interface for the output objects:
 
 Respond ONLY with the JSON array, nothing else. No markdown formatting.`;
 
-    const response = await genAI.models.generateContent({
-      model: "gemini-3.6-flash",
+    const requestPayload = {
       contents: [
         {
           fileData: {
@@ -192,7 +191,49 @@ Respond ONLY with the JSON array, nothing else. No markdown formatting.`;
           }
         }
       }
-    });
+    };
+
+    // Retry with exponential backoff and fallback models
+    const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+    let response: any = null;
+    let lastError: any = null;
+
+    for (const modelName of candidateModels) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`Sending prompt to ${modelName} (attempt ${attempt}/3)...`);
+          response = await genAI.models.generateContent({
+            ...requestPayload,
+            model: modelName,
+          });
+          if (response && response.text) {
+            console.log(`Success with model ${modelName}`);
+            break;
+          }
+        } catch (err: any) {
+          lastError = err;
+          const errMsg = err?.message || String(err);
+          const status = err?.status || err?.code;
+          console.warn(`Model ${modelName} attempt ${attempt} failed:`, errMsg);
+
+          const isDemandSpike = status === 503 || status === 429 || status === 500 || status === 504 || 
+            errMsg.includes('503') || errMsg.includes('UNAVAILABLE') || errMsg.includes('high demand') || errMsg.includes('quota');
+
+          if (isDemandSpike && attempt < 3) {
+            const delayMs = attempt * 2500;
+            console.log(`High demand or transient error detected. Retrying ${modelName} in ${delayMs}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+          break; // Try next model fallback
+        }
+      }
+      if (response && response.text) break;
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error("Gemini AI models are currently unavailable due to high traffic demand. Please try again in a few moments.");
+    }
 
     const textResult = response.text || "[]";
     

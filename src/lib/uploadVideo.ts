@@ -12,10 +12,16 @@ export async function uploadAndTranslateVideo(
     const formData = new FormData();
     formData.append('video', fileOrBlob);
     onProgress?.(30);
-    const response = await fetch('/api/translate-video', {
-      method: 'POST',
-      body: formData,
-    });
+    
+    let response: Response;
+    try {
+      response = await fetch('/api/translate-video', {
+        method: 'POST',
+        body: formData,
+      });
+    } catch (netErr: any) {
+      throw new Error("Unable to connect to the video processing server. Please check your network or try again.");
+    }
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
@@ -42,10 +48,15 @@ export async function uploadAndTranslateVideo(
     formData.append('chunkIndex', i.toString());
     formData.append('totalChunks', totalChunks.toString());
 
-    const chunkRes = await fetch('/api/upload-chunk', {
-      method: 'POST',
-      body: formData,
-    });
+    let chunkRes: Response;
+    try {
+      chunkRes = await fetch('/api/upload-chunk', {
+        method: 'POST',
+        body: formData,
+      });
+    } catch (netErr) {
+      throw new Error(`Network error while uploading video chunk ${i + 1}/${totalChunks}. Please retry.`);
+    }
 
     if (!chunkRes.ok) {
       const errData = await chunkRes.json().catch(() => ({}));
@@ -59,16 +70,21 @@ export async function uploadAndTranslateVideo(
   onProgress?.(70);
 
   // Ask backend to assemble chunks and run Gemini video translation
-  const processRes = await fetch('/api/process-video', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      uploadId,
-      fileName,
-      totalChunks,
-      mimeType,
-    }),
-  });
+  let processRes: Response;
+  try {
+    processRes = await fetch('/api/process-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uploadId,
+        fileName,
+        totalChunks,
+        mimeType,
+      }),
+    });
+  } catch (netErr) {
+    throw new Error("Network connection lost during video AI analysis. Please try again.");
+  }
 
   if (!processRes.ok) {
     const errData = await processRes.json().catch(() => ({}));
