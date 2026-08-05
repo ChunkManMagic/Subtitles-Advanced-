@@ -1,3 +1,34 @@
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 5,
+  initialDelayMs: number = 1200
+): Promise<Response> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        return response;
+      }
+      // If server returned 500, 502, 503, 504, 429 or similar transient error, retry
+      if ([500, 502, 503, 504, 429].includes(response.status) && attempt < maxRetries) {
+        console.warn(`[Upload Retry] ${url} returned ${response.status}, retrying (${attempt}/${maxRetries})...`);
+        await new Promise((resolve) => setTimeout(resolve, initialDelayMs * attempt));
+        continue;
+      }
+      return response;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[Upload Network Error] ${url} attempt ${attempt}/${maxRetries}:`, err?.message || err);
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, initialDelayMs * attempt));
+      }
+    }
+  }
+  throw lastErr || new Error(`Network request to ${url} failed after ${maxRetries} attempts.`);
+}
+
 export async function uploadAndTranslateVideo(
   fileOrBlob: File | Blob,
   fileName: string = 'video.mp4',
@@ -5,7 +36,7 @@ export async function uploadAndTranslateVideo(
 ): Promise<any> {
   const size = fileOrBlob.size;
   const mimeType = fileOrBlob.type || 'video/mp4';
-  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+  const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB chunks for optimal speed and reliability
 
   // For small Files (< 10MB), direct upload is fast
   if (size <= 10 * 1024 * 1024 && fileOrBlob instanceof File) {
@@ -15,10 +46,10 @@ export async function uploadAndTranslateVideo(
     
     let response: Response;
     try {
-      response = await fetch('/api/translate-video', {
+      response = await fetchWithRetry('/api/translate-video', {
         method: 'POST',
         body: formData,
-      });
+      }, 3);
     } catch (netErr: any) {
       throw new Error("Unable to connect to the video processing server. Please check your network or try again.");
     }
@@ -50,12 +81,12 @@ export async function uploadAndTranslateVideo(
 
     let chunkRes: Response;
     try {
-      chunkRes = await fetch('/api/upload-chunk', {
+      chunkRes = await fetchWithRetry('/api/upload-chunk', {
         method: 'POST',
         body: formData,
-      });
+      }, 5); // Retry up to 5 times per chunk
     } catch (netErr) {
-      throw new Error(`Network error while uploading video chunk ${i + 1}/${totalChunks}. Please retry.`);
+      throw new Error(`Failed uploading chunk ${i + 1}/${totalChunks} after multiple retries. Please verify your connection.`);
     }
 
     if (!chunkRes.ok) {
@@ -72,7 +103,7 @@ export async function uploadAndTranslateVideo(
   // Ask backend to assemble chunks and run Gemini video translation
   let processRes: Response;
   try {
-    processRes = await fetch('/api/process-video', {
+    processRes = await fetchWithRetry('/api/process-video', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -81,7 +112,7 @@ export async function uploadAndTranslateVideo(
         totalChunks,
         mimeType,
       }),
-    });
+    }, 4, 3000);
   } catch (netErr) {
     throw new Error("Network connection lost during video AI analysis. Please try again.");
   }

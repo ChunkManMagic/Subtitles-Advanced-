@@ -110,7 +110,7 @@ export function Header() {
               History
             </button>
 
-            {project ? (
+            {(project || subtitles.length > 0) ? (
               <>
                 <div className="hidden lg:flex items-center gap-2 bg-[#0A0A0B] px-2 py-1 rounded border border-[#313135]">
                   <Languages className="w-3 h-3 text-amber-400" />
@@ -128,7 +128,8 @@ export function Header() {
 
                 <button 
                   onClick={() => setShowExportModal(true)}
-                  className="px-3.5 py-1 bg-[#00F5FF] text-black font-bold uppercase hover:bg-white transition-all flex items-center rounded-sm text-[10px] shadow-[0_0_12px_rgba(0,245,255,0.4)] gap-1.5"
+                  className="px-3.5 py-1 bg-[#00F5FF] text-black font-bold uppercase hover:bg-white transition-all flex items-center rounded-sm text-[10px] shadow-[0_0_12px_rgba(0,245,255,0.4)] gap-1.5 animate-pulse"
+                  title="Download the finished subtitled video or subtitle files (.SRT / .VTT)"
                 >
                   <Download className="w-3.5 h-3.5 text-black" />
                   Download Finished Product
@@ -139,6 +140,23 @@ export function Header() {
             )}
           </div>
         </div>
+
+        {/* Translation Completion Action Banner */}
+        {currentStage === 'completed' && subtitles.length > 0 && (
+          <div className="bg-gradient-to-r from-emerald-950/80 via-[#00F5FF]/10 to-emerald-950/80 border-t border-emerald-500/40 px-4 py-1.5 flex items-center justify-between text-[11px] animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 text-emerald-300 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Translation Complete! All subtitles formatted in Easy-Read English.</span>
+            </div>
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="px-3 py-0.5 bg-[#00F5FF] text-black font-extrabold uppercase rounded hover:bg-white transition-all flex items-center gap-1.5 text-[10px] shadow-[0_0_10px_rgba(0,245,255,0.5)] cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-black" />
+              Download Finished Product
+            </button>
+          </div>
+        )}
 
         {/* Expanded Detailed Task Pipeline Drawer / Panel */}
         {showDetailedTasks && (

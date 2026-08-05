@@ -33,7 +33,8 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const videoTrack = tracks.find(t => t.type === 'video');
-  const videoUrl = videoTrack?.items[0]?.url;
+  const trackItem = videoTrack?.items[0];
+  const videoUrl = trackItem?.url || (trackItem?.file ? URL.createObjectURL(trackItem.file) : undefined) || project?.videoUrl;
 
   useEffect(() => {
     if (!isOpen) {

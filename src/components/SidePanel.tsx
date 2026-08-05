@@ -15,14 +15,17 @@ import {
   AlignLeft, 
   AlignCenter, 
   AlignRight, 
-  Sliders 
+  Sliders,
+  Download 
 } from 'lucide-react';
 import { useStore } from '../store';
 import { cn } from '../lib/utils';
 import { EnglishStyle } from '../types';
+import { ExportVideoModal } from './ExportVideoModal';
 
 export function SidePanel() {
   const [activeTab, setActiveTab] = React.useState<'subtitles' | 'placement' | 'settings'>('subtitles');
+  const [showExportModal, setShowExportModal] = React.useState(false);
   const { 
     subtitles, 
     updateSubtitle, 
@@ -76,6 +79,25 @@ export function SidePanel() {
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">
+        {/* Prominent Download Finished Product Action Card */}
+        <div className="bg-gradient-to-r from-[#1A1A1D] to-[#0F0F11] p-2.5 rounded-lg border border-[#00F5FF]/50 shadow-[0_0_12px_rgba(0,245,255,0.25)] flex items-center justify-between">
+          <div className="space-y-0.5">
+            <div className="text-[10px] font-bold text-white uppercase flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-[#00F5FF]" /> Finished Product
+            </div>
+            <p className="text-[9px] text-slate-400">
+              {subtitles.length} English cues ready for download
+            </p>
+          </div>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="px-3 py-1.5 bg-[#00F5FF] text-black font-extrabold uppercase hover:bg-white transition-all flex items-center gap-1 text-[10px] rounded shadow cursor-pointer shrink-0"
+          >
+            <Download className="w-3.5 h-3.5 text-black" />
+            Download
+          </button>
+        </div>
+
         {activeTab === 'subtitles' ? (
           <>
             {/* Multi-language summary banner */}
@@ -467,25 +489,35 @@ export function SidePanel() {
       </div>
       
       {/* Action Footer */}
-      <div className="p-3 border-t border-[#313135] bg-[#0F0F11] shrink-0">
+      <div className="p-3 border-t border-[#313135] bg-[#0F0F11] shrink-0 flex flex-col gap-2">
+        <button 
+          onClick={() => setShowExportModal(true)}
+          className="w-full py-2 bg-[#00F5FF] text-black font-extrabold uppercase hover:bg-white flex items-center justify-center text-[10px] rounded transition-all shadow-[0_0_10px_rgba(0,245,255,0.4)] cursor-pointer"
+        >
+          <Download className="w-3.5 h-3.5 mr-1.5 text-black" />
+          Download Finished Product
+        </button>
+
         <button 
           onClick={rescanAndTranslateToEnglish}
           disabled={isScanningLanguages}
-          className="w-full py-2 bg-[#00F5FF] text-black font-bold uppercase hover:bg-white flex items-center justify-center text-[10px] rounded transition-colors disabled:opacity-50"
+          className="w-full py-1.5 bg-[#1A1A1D] border border-[#313135] text-slate-300 font-bold uppercase hover:bg-[#26262a] hover:text-white flex items-center justify-center text-[9.5px] rounded transition-colors disabled:opacity-50"
         >
           {isScanningLanguages ? (
             <>
-              <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin text-black" />
+              <RefreshCw className="w-3 h-3 mr-1.5 animate-spin text-[#00F5FF]" />
               Auto-Detecting Languages & Formatting...
             </>
           ) : (
             <>
-              <Languages className="w-3.5 h-3.5 mr-2 text-black" />
+              <Languages className="w-3 h-3 mr-1.5 text-[#00F5FF]" />
               Auto-Detect Languages & Format to English
             </>
           )}
         </button>
       </div>
+
+      <ExportVideoModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} />
     </div>
   );
 }

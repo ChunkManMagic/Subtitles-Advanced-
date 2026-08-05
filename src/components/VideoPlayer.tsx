@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { Play, Pause, Volume2, VolumeX, Globe, Maximize, RotateCcw, Film } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Globe, Maximize, RotateCcw, Film, Download } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { ExportVideoModal } from './ExportVideoModal';
 
 export function VideoPlayer() {
+  const [showExportModal, setShowExportModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const requestRef = useRef<number | null>(null);
   const lastStoreUpdateRef = useRef<number>(0);
@@ -187,12 +189,24 @@ export function VideoPlayer() {
         </div>
       )}
 
-      {/* Floating Status Indicator Badges */}
-      <div className="absolute top-4 left-4 flex gap-2 z-10">
-        <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase shadow-lg shadow-red-600/20">Live Proxy</span>
-        <span className="bg-black/85 text-[#00F5FF] border border-[#313135] px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-black/30">
-          <Globe className="w-3 h-3" /> 🇺🇸 ENGLISH SUBTITLED
-        </span>
+      {/* Floating Status Indicator Badges & Download Action */}
+      <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10 pointer-events-none">
+        <div className="flex gap-2 pointer-events-auto">
+          <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase shadow-lg shadow-red-600/20">Live Proxy</span>
+          <span className="bg-black/85 text-[#00F5FF] border border-[#313135] px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-black/30">
+            <Globe className="w-3 h-3" /> 🇺🇸 ENGLISH SUBTITLED
+          </span>
+        </div>
+
+        {(project || subtitles.length > 0) && (
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="pointer-events-auto px-3 py-1 bg-[#00F5FF] text-black font-extrabold uppercase rounded hover:bg-white transition-all flex items-center gap-1.5 text-[10px] shadow-[0_0_12px_rgba(0,245,255,0.4)] cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-black" />
+            Download Product
+          </button>
+        )}
       </div>
 
       {/* 60fps Active Subtitle Overlay - Rendered dynamically over video viewports with custom placement */}
@@ -312,9 +326,21 @@ export function VideoPlayer() {
             >
               <Maximize className="w-4 h-4" />
             </button>
+
+            {/* Quick Export / Download Button */}
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="bg-[#00F5FF]/10 text-[#00F5FF] border border-[#00F5FF]/40 hover:bg-[#00F5FF] hover:text-black font-bold uppercase px-2 py-1 rounded text-[9.5px] transition-all flex items-center gap-1 ml-1"
+              title="Download finished subtitled video"
+            >
+              <Download className="w-3 h-3" />
+              Download
+            </button>
           </div>
         </div>
       </div>
+
+      <ExportVideoModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} />
     </div>
   );
 }
