@@ -1,179 +1,279 @@
-import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Maximize, Languages, Globe } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useStore } from '../store';
+import { Play, Pause, Volume2, VolumeX, Globe, Maximize, RotateCcw, Film } from 'lucide-react';
 
 export function VideoPlayer() {
-  const { isPlaying, setIsPlaying, project, tracks, currentTime, setCurrentTime, subtitles, translationSettings } = useStore();
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const requestRef = useRef<number | null>(null);
+  const lastStoreUpdateRef = useRef<number>(0);
 
-  React.useEffect(() => {
-    if (!videoRef.current) return;
-    
+  const {
+    subtitles,
+    isPlaying,
+    setIsPlaying,
+    currentTime,
+    setCurrentTime,
+    currentProject,
+  } = useStore((state) => ({
+    subtitles: state.subtitles,
+    isPlaying: state.taskManager.isProcessing ? false : state.isPlaying,
+    setIsPlaying: state.setIsPlaying,
+    currentTime: state.currentTime,
+    setCurrentTime: state.setCurrentTime,
+    currentProject: state.currentProject,
+  }));
+
+  const [localIsPlaying, setLocalIsPlaying] = useState(false);
+  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+
+  // Synchronize play state from store
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
     if (isPlaying) {
-      videoRef.current.play().catch(e => {
-        console.warn('Playback prevented', e);
+      video.play().catch(() => {
         setIsPlaying(false);
       });
+      setLocalIsPlaying(true);
     } else {
-      videoRef.current.pause();
+      video.pause();
+      setLocalIsPlaying(false);
     }
   }, [isPlaying, setIsPlaying]);
 
-  const handleTimeUpdate = () => {
+  // Synchronize seek/time changes from store (e.g. dragging timeline cursor)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Only seek video if the time difference is significant (prevents infinite loop with animation frame updates)
+    if (Math.abs(video.currentTime - currentTime) > 0.3) {
+      video.currentTime = currentTime;
+    }
+  }, [currentTime]);
+
+  // Premium Animation Loop for 60fps subtitle sync & throttled timeline cursor sync
+  useEffect(() => {
+    const updateLoop = () => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const currTime = video.currentTime;
+
+      // 1. High-Precision Local Subtitle Sync (0ms delay)
+      const matchedSub = subtitles.find(
+        (sub) => currTime >= sub.startTime && currTime <= sub.endTime
+      );
+      setActiveSubtitle(matchedSub ? matchedSub.translatedText : null);
+
+      // 2. Throttled Global Store Sync for Timeline Cursor (throttled to 100ms to save CPU)
+      const now = Date.now();
+      if (now - lastStoreUpdateRef.current > 100 || video.paused) {
+        setCurrentTime(currTime);
+        lastStoreUpdateRef.current = now;
+      }
+
+      // Schedule next frame
+      if (!video.paused) {
+        requestRef.current = requestAnimationFrame(updateLoop);
+      }
+    };
+
+    const video = videoRef.current;
+    if (video) {
+      if (isPlaying) {
+        requestRef.current = requestAnimationFrame(updateLoop);
+      } else {
+        // Run once on pause to make sure subtitle matches seeked frame
+        updateLoop();
+      }
+    }
+
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, [isPlaying, subtitles, setCurrentTime]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      setIsPlaying(true);
+    } else {
+      setIsPlaying(false);
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setVolume(val);
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      if (videoRef.current.currentTime >= (project?.duration || 0)) {
-        setIsPlaying(false);
+      videoRef.current.volume = val;
+      videoRef.current.muted = val === 0;
+      setIsMuted(val === 0);
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      const nextMute = !isMuted;
+      videoRef.current.muted = nextMute;
+      setIsMuted(nextMute);
+      if (nextMute) {
+        videoRef.current.volume = 0;
+      } else {
+        videoRef.current.volume = volume || 1;
       }
     }
   };
 
-  const handleSeek = (newTime: number) => {
-    setCurrentTime(newTime);
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    const ms = Math.floor((time % 1) * 100);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  };
+
+  const handleFullscreen = () => {
     if (videoRef.current) {
-      videoRef.current.currentTime = newTime;
+      videoRef.current.requestFullscreen().catch((err) => {
+        console.error("Fullscreen request failed", err);
+      });
     }
   };
 
-  React.useEffect(() => {
-    if (videoRef.current && Math.abs(videoRef.current.currentTime - currentTime) > 0.5) {
-      videoRef.current.currentTime = currentTime;
+  const handleReset = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      setCurrentTime(0);
+      if (isPlaying) {
+        videoRef.current.play().catch(() => {});
+      }
     }
-  }, [currentTime]);
-
-  // Find the video URL from tracks
-  const videoTrack = tracks.find(t => t.type === 'video');
-  const videoUrl = videoTrack?.items[0]?.url;
-
-  // Active subtitle based on currentTime or playback
-  const activeSub = subtitles.find(sub => currentTime >= sub.startTime && currentTime <= sub.endTime);
-
-  const activeEnglishText = activeSub 
-    ? (translationSettings.englishStyle === 'simple' && activeSub.simpleEnglishText 
-        ? activeSub.simpleEnglishText 
-        : activeSub.translatedText)
-    : "";
-
-  const togglePlay = () => setIsPlaying(!isPlaying);
+  };
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col bg-[#000] relative">
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden p-4">
-        <div className="aspect-video w-full max-w-4xl bg-[#111] border border-[#313135] relative overflow-hidden flex items-center justify-center group shadow-2xl">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none"></div>
-          {videoUrl ? (
-            <video 
-              ref={videoRef}
-              src={videoUrl}
-              className="w-full h-full object-contain"
-              controls={false}
-              onTimeUpdate={handleTimeUpdate}
-            />
-          ) : (
-            <div className="text-slate-600 font-mono text-[80px] opacity-10">PREVIEW</div>
-          )}
-          
-          <div className="absolute top-3 left-3 flex gap-2">
-            <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">Live Proxy</span>
-            <span className="bg-black/80 text-[#00F5FF] border border-[#313135] px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1">
-              <Globe className="w-2.5 h-2.5" /> 🇺🇸 ENGLISH SUBTITLED
-            </span>
-          </div>
-
-          <div className="absolute top-3 right-3 flex gap-1.5">
-            {activeSub && (
-              <span className="bg-black/80 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded text-[9px] font-mono flex items-center gap-1">
-                <Languages className="w-2.5 h-2.5" /> Source: {activeSub.detectedLanguage} (Auto-Detected)
-              </span>
-            )}
-          </div>
-
-          {/* Subtitle Overlay in Easy-to-Understand English Format */}
-          {activeSub && (
-            <div className="absolute bottom-8 px-6 w-full text-center">
-              <div className="inline-block bg-black/85 border border-[#00F5FF]/60 text-white py-2 px-5 text-base md:text-lg font-bold rounded-lg shadow-2xl backdrop-blur-md max-w-2xl leading-snug">
-                <span className="text-yellow-300 drop-shadow-sm font-sans">{activeEnglishText}</span>
-              </div>
-
-              <div className="flex items-center justify-center gap-3 text-[9px] font-mono mt-1.5">
-                <span className="text-[#00F5FF] bg-black/60 border border-[#313135] px-2 py-0.5 rounded">
-                  Format: Easy Read ({translationSettings.englishStyle.toUpperCase()})
-                </span>
-                <span className="text-emerald-400 bg-black/60 border border-[#313135] px-2 py-0.5 rounded">
-                  CPS: {activeSub.cps || '14.2'} ({activeSub.readingDifficulty || 'Easy'})
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="absolute bottom-4 left-0 w-full h-1 bg-slate-800">
-            <div className="h-full bg-[#00F5FF] w-1/3 shadow-[0_0_10px_#00F5FF]"></div>
-          </div>
+    <div className="relative w-full aspect-video bg-[#050507] rounded-xl overflow-hidden group shadow-2xl border border-white/5 flex flex-col justify-center items-center">
+      {/* Video Stream Element */}
+      {currentProject?.videoUrl ? (
+        <video
+          ref={videoRef}
+          src={currentProject.videoUrl}
+          className="w-full h-full object-contain"
+          playsInline
+          onClick={togglePlay}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-2 bg-slate-950/60 font-medium">
+          <Film className="w-8 h-8 text-slate-700 animate-pulse" />
+          <span>No Video Stream Loaded</span>
         </div>
+      )}
+
+      {/* Floating Status Indicator Badges */}
+      <div className="absolute top-4 left-4 flex gap-2 z-10">
+        <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase shadow-lg shadow-red-600/20">Live Proxy</span>
+        <span className="bg-black/85 text-[#00F5FF] border border-[#313135] px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-black/30">
+          <Globe className="w-3 h-3" /> 🇺🇸 ENGLISH SUBTITLED
+        </span>
       </div>
 
-      {/* Player Controls */}
-      <div className="h-10 bg-[#161618] border-t border-[#313135] flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center space-x-2">
-          <button 
-            className="text-slate-400 hover:text-white transition-colors p-1.5"
-            onClick={() => handleSeek(Math.max(0, currentTime - 5))}
-            title="Skip Back 5s"
-          >
-            <SkipBack className="w-4 h-4" />
-          </button>
-          <button 
-            className="px-2.5 py-1 bg-slate-800 text-[10px] text-white font-bold uppercase rounded hover:bg-slate-700 flex items-center gap-1.5 border border-[#313135]"
-            onClick={togglePlay}
-          >
-            {isPlaying ? <Pause className="w-3 h-3 text-[#00F5FF]" /> : <Play className="w-3 h-3 text-[#00F5FF]" />}
-            {isPlaying ? 'Pause' : 'Play Video'}
-          </button>
-          <button 
-            className="text-slate-400 hover:text-white transition-colors p-1.5"
-            onClick={() => handleSeek(Math.min(project?.duration || 0, currentTime + 5))}
-            title="Skip Forward 5s"
-          >
-            <SkipForward className="w-4 h-4" />
-          </button>
-          
-          <div className="font-mono text-[#00F5FF] text-[10px] ml-4 bg-[#000] px-2 py-0.5 rounded border border-[#313135]">
-            00:00:{(currentTime % 60).toFixed(1).padStart(4, '0')} / 00:00:{(project?.duration || 22.0).toFixed(1).padStart(4, '0')}
+      {/* 60fps Active Subtitle Overlay - Rendered dynamically over video viewports */}
+      <div className="absolute left-6 right-6 bottom-16 flex justify-center pointer-events-none z-20 transition-all duration-150">
+        {activeSubtitle && (
+          <div className="px-5 py-2.5 rounded-xl bg-black/85 border border-white/15 text-white text-center text-sm md:text-base font-medium font-sans leading-snug max-w-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] tracking-wide">
+            {activeSubtitle}
           </div>
+        )}
+      </div>
+
+      {/* Custom Control Overlay Panel */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300 flex flex-col gap-3 z-30">
+        {/* Timeline Progress Bar Scrubber */}
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={videoRef.current?.duration || 100}
+            step={0.01}
+            value={videoRef.current?.currentTime || 0}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (videoRef.current) {
+                videoRef.current.currentTime = val;
+              }
+              setCurrentTime(val);
+            }}
+            className="w-full h-1 bg-white/10 hover:bg-white/20 rounded-lg appearance-none cursor-pointer accent-indigo-500 outline-none transition-colors"
+          />
         </div>
 
-        <div className="flex items-center space-x-3 text-slate-400 text-[10px]">
-          <span className="font-mono text-slate-500 uppercase">Video Audio: Original Sound</span>
-          <button 
-            className="hover:text-white transition-colors"
-            onClick={() => {
-              if (videoRef.current) {
-                videoRef.current.muted = !videoRef.current.muted;
-              }
-            }}
-            title="Toggle Mute"
-          >
-            <Volume2 className="w-4 h-4" />
-          </button>
-          <button 
-            className="hover:text-white transition-colors"
-            onClick={() => {
-              if (containerRef.current) {
-                if (document.fullscreenElement) {
-                  document.exitFullscreen();
-                } else {
-                  containerRef.current.requestFullscreen();
-                }
-              }
-            }}
-            title="Toggle Fullscreen"
-          >
-            <Maximize className="w-4 h-4" />
-          </button>
+        {/* Media Buttons Row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={togglePlay}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl uppercase tracking-wider shadow-lg shadow-indigo-600/10 transition-all active:scale-95"
+            >
+              {localIsPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+              {localIsPlaying ? 'Pause' : 'Play Video'}
+            </button>
+
+            <button
+              onClick={handleReset}
+              className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-white/5 transition-all"
+              title="Reset playhead"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Time Indicators */}
+            <div className="text-[10px] font-mono text-zinc-400 select-none">
+              <span>{formatTime(videoRef.current?.currentTime || 0)}</span>
+              <span className="mx-1 opacity-50">/</span>
+              <span>{formatTime(videoRef.current?.duration || 0)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Volume Control */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleMute}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500 outline-none"
+              />
+            </div>
+
+            {/* Fullscreen Button */}
+            <button
+              onClick={handleFullscreen}
+              className="text-slate-400 hover:text-white transition-colors p-1"
+              title="Fullscreen"
+            >
+              <Maximize className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
