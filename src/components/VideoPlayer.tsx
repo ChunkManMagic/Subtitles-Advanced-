@@ -7,26 +7,21 @@ export function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const requestRef = useRef<number | null>(null);
   const lastStoreUpdateRef = useRef<number>(0);
+  const subtitles = useStore((state) => state.subtitles);
+  const isProcessing = useStore((state) => state.taskManager.isProcessing);
+  const storeIsPlaying = useStore((state) => state.isPlaying);
+  const isPlaying = isProcessing ? false : storeIsPlaying;
+  const setIsPlaying = useStore((state) => state.setIsPlaying);
+  const currentTime = useStore((state) => state.currentTime);
+  const setCurrentTime = useStore((state) => state.setCurrentTime);
+  const project = useStore((state) => state.project);
+  const tracks = useStore((state) => state.tracks);
+  const subtitleStyleSettings = useStore((state) => state.subtitleStyleSettings);
 
-  const {
-    subtitles,
-    isPlaying,
-    setIsPlaying,
-    currentTime,
-    setCurrentTime,
-    project,
-    tracks,
-    subtitleStyleSettings,
-  } = useStore((state) => ({
-    subtitles: state.subtitles,
-    isPlaying: state.taskManager.isProcessing ? false : state.isPlaying,
-    setIsPlaying: state.setIsPlaying,
-    currentTime: state.currentTime,
-    setCurrentTime: state.setCurrentTime,
-    project: state.project,
-    tracks: state.tracks,
-    subtitleStyleSettings: state.subtitleStyleSettings,
-  }));
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   const [localIsPlaying, setLocalIsPlaying] = useState(false);
   const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
@@ -76,9 +71,15 @@ export function VideoPlayer() {
 
       // 2. Throttled Global Store Sync for Timeline Cursor (throttled to 100ms to save CPU)
       const now = Date.now();
-      if (now - lastStoreUpdateRef.current > 100 || video.paused) {
-        setCurrentTime(currTime);
-        lastStoreUpdateRef.current = now;
+      if (!video.paused) {
+        if (now - lastStoreUpdateRef.current > 100) {
+          setCurrentTime(currTime);
+          lastStoreUpdateRef.current = now;
+        }
+      } else {
+        if (Math.abs(currTime - currentTimeRef.current) > 0.05) {
+          setCurrentTime(currTime);
+        }
       }
 
       // Schedule next frame
