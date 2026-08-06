@@ -38,6 +38,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Node.js fallback server listening on http://localhost:${PORT}`);
+// Explicitly listen on '0.0.0.0' to bind to all IPv4 & IPv6 loopbacks natively on Android
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Node.js fallback server listening on http://127.0.0.1:${PORT}`);
 });
