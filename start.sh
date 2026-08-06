@@ -29,7 +29,17 @@ bun install
 
 echo ""
 echo "==================================================="
-echo "[+] Ready to go! Launching your app..."
+echo "[+] Starting the Bun Backend Server (Port 3000)..."
+echo "==================================================="
+bun server.ts &
+BACKEND_PID=$!
+
+echo ""
+echo "==================================================="
+echo "[+] Launching the Vite Frontend Server (Port 5173)..."
 echo "==================================================="
 echo ""
 bun run dev
+
+# Terminate the backend server when the frontend exits
+kill $BACKEND_PID
