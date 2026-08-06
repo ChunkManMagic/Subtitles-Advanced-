@@ -1,36 +1,31 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { Play, Pause, Volume2, VolumeX, Globe, Maximize, RotateCcw, Film, Download } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { ExportVideoModal } from './ExportVideoModal';
+import { Play, Pause, Volume2, VolumeX, Globe, Maximize, RotateCcw, Film } from 'lucide-react';
 
 export function VideoPlayer() {
-  const [showExportModal, setShowExportModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const requestRef = useRef<number | null>(null);
   const lastStoreUpdateRef = useRef<number>(0);
-  const subtitles = useStore((state) => state.subtitles);
-  const isProcessing = useStore((state) => state.taskManager.isProcessing);
-  const storeIsPlaying = useStore((state) => state.isPlaying);
-  const isPlaying = isProcessing ? false : storeIsPlaying;
-  const setIsPlaying = useStore((state) => state.setIsPlaying);
-  const currentTime = useStore((state) => state.currentTime);
-  const setCurrentTime = useStore((state) => state.setCurrentTime);
-  const project = useStore((state) => state.project);
-  const tracks = useStore((state) => state.tracks);
-  const subtitleStyleSettings = useStore((state) => state.subtitleStyleSettings);
 
-  const currentTimeRef = useRef(currentTime);
-  useEffect(() => {
-    currentTimeRef.current = currentTime;
-  }, [currentTime]);
-
-  const [localIsPlaying, setLocalIsPlaying] = useState(false);
-  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
+  // Playback state is managed locally in the player to avoid global store re-render loops and missing store setter errors
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
 
-  // Synchronize play state from store
+  const {
+    subtitles,
+    currentTime,
+    setCurrentTime,
+    currentProject,
+  } = useStore((state) => ({
+    subtitles: state.subtitles,
+    currentTime: state.currentTime,
+    setCurrentTime: state.setCurrentTime,
+    currentProject: state.currentProject,
+  }));
+
+  // Synchronize play state locally on the video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -39,12 +34,10 @@ export function VideoPlayer() {
       video.play().catch(() => {
         setIsPlaying(false);
       });
-      setLocalIsPlaying(true);
     } else {
       video.pause();
-      setLocalIsPlaying(false);
     }
-  }, [isPlaying, setIsPlaying]);
+  }, [isPlaying]);
 
   // Synchronize seek/time changes from store (e.g. dragging timeline cursor)
   useEffect(() => {
@@ -73,15 +66,9 @@ export function VideoPlayer() {
 
       // 2. Throttled Global Store Sync for Timeline Cursor (throttled to 100ms to save CPU)
       const now = Date.now();
-      if (!video.paused) {
-        if (now - lastStoreUpdateRef.current > 100) {
-          setCurrentTime(currTime);
-          lastStoreUpdateRef.current = now;
-        }
-      } else {
-        if (Math.abs(currTime - currentTimeRef.current) > 0.05) {
-          setCurrentTime(currTime);
-        }
+      if (now - lastStoreUpdateRef.current > 100 || video.paused) {
+        setCurrentTime(currTime);
+        lastStoreUpdateRef.current = now;
       }
 
       // Schedule next frame
@@ -108,14 +95,7 @@ export function VideoPlayer() {
   }, [isPlaying, subtitles, setCurrentTime]);
 
   const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      setIsPlaying(true);
-    } else {
-      setIsPlaying(false);
-    }
+    setIsPlaying(prev => !prev);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,16 +146,13 @@ export function VideoPlayer() {
     }
   };
 
-  const videoTrack = tracks.find(t => t.type === 'video');
-  const videoUrl = videoTrack?.items[0]?.url || (project as any)?.videoUrl;
-
   return (
     <div className="relative w-full aspect-video bg-[#050507] rounded-xl overflow-hidden group shadow-2xl border border-white/5 flex flex-col justify-center items-center">
       {/* Video Stream Element */}
-      {videoUrl ? (
+      {currentProject?.videoUrl ? (
         <video
           ref={videoRef}
-          src={videoUrl}
+          src={currentProject.videoUrl}
           className="w-full h-full object-contain"
           playsInline
           onClick={togglePlay}
@@ -189,66 +166,22 @@ export function VideoPlayer() {
         </div>
       )}
 
-      {/* Floating Status Indicator Badges & Download Action */}
-      <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10 pointer-events-none">
-        <div className="flex gap-2 pointer-events-auto">
-          <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase shadow-lg shadow-red-600/20">Live Proxy</span>
-          <span className="bg-black/85 text-[#00F5FF] border border-[#313135] px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-black/30">
-            <Globe className="w-3 h-3" /> 🇺🇸 ENGLISH SUBTITLED
-          </span>
-        </div>
-
-        {(project || subtitles.length > 0) && (
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="pointer-events-auto px-3 py-1 bg-[#00F5FF] text-black font-extrabold uppercase rounded hover:bg-white transition-all flex items-center gap-1.5 text-[10px] shadow-[0_0_12px_rgba(0,245,255,0.4)] cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-black" />
-            Download Product
-          </button>
-        )}
+      {/* Floating Status Indicator Badges */}
+      <div className="absolute top-4 left-4 flex gap-2 z-10">
+        <span className="bg-red-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase shadow-lg shadow-red-600/20">Live Proxy</span>
+        <span className="bg-black/85 text-[#00F5FF] border border-[#313135] px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase flex items-center gap-1.5 shadow-lg shadow-black/30">
+          <Globe className="w-3 h-3" /> 🇺🇸 ENGLISH SUBTITLED
+        </span>
       </div>
 
-      {/* 60fps Active Subtitle Overlay - Rendered dynamically over video viewports with custom placement */}
-      {activeSubtitle && (
-        <div 
-          className="absolute pointer-events-none z-20 transition-all duration-150 max-w-[85%]"
-          style={{
-            top: `${subtitleStyleSettings.yOffsetPercent}%`,
-            left: `${subtitleStyleSettings.xOffsetPercent}%`,
-            transform: 'translate(-50%, -50%)',
-            textAlign: subtitleStyleSettings.alignment,
-          }}
-        >
-          <div 
-            className={cn(
-              "px-4 py-2 rounded-xl font-medium leading-snug tracking-wide transition-all",
-              subtitleStyleSettings.fontSize === 'small' && "text-xs md:text-sm",
-              subtitleStyleSettings.fontSize === 'medium' && "text-sm md:text-base",
-              subtitleStyleSettings.fontSize === 'large' && "text-base md:text-lg",
-              subtitleStyleSettings.fontSize === 'xlarge' && "text-lg md:text-xl font-bold",
-              
-              subtitleStyleSettings.bgStyle === 'yellow_box' 
-                ? "bg-yellow-400 text-black border border-yellow-500 font-bold shadow-xl"
-                : subtitleStyleSettings.bgStyle === 'solid_black'
-                ? "bg-black border border-zinc-800 shadow-xl"
-                : subtitleStyleSettings.bgStyle === 'text_shadow'
-                ? "bg-transparent drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]"
-                : subtitleStyleSettings.bgStyle === 'transparent'
-                ? "bg-black/40 backdrop-blur-sm border border-white/10"
-                : "bg-black/85 border border-[#00F5FF]/40 shadow-[0_0_20px_rgba(0,245,255,0.15)]",
-
-              subtitleStyleSettings.bgStyle !== 'yellow_box' && (
-                subtitleStyleSettings.textColor === 'yellow' ? "text-yellow-300" :
-                subtitleStyleSettings.textColor === 'cyan' ? "text-[#00F5FF]" :
-                subtitleStyleSettings.textColor === 'lime' ? "text-emerald-400" : "text-white"
-              )
-            )}
-          >
+      {/* 60fps Active Subtitle Overlay - Rendered dynamically over video viewports */}
+      <div className="absolute left-6 right-6 bottom-16 flex justify-center pointer-events-none z-20 transition-all duration-150">
+        {activeSubtitle && (
+          <div className="px-5 py-2.5 rounded-xl bg-black/85 border border-white/15 text-white text-center text-sm md:text-base font-medium font-sans leading-snug max-w-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] tracking-wide">
             {activeSubtitle}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Custom Control Overlay Panel */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300 flex flex-col gap-3 z-30">
@@ -278,8 +211,8 @@ export function VideoPlayer() {
               onClick={togglePlay}
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl uppercase tracking-wider shadow-lg shadow-indigo-600/10 transition-all active:scale-95"
             >
-              {localIsPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-              {localIsPlaying ? 'Pause' : 'Play Video'}
+              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+              {isPlaying ? 'Pause' : 'Play Video'}
             </button>
 
             <button
@@ -326,21 +259,9 @@ export function VideoPlayer() {
             >
               <Maximize className="w-4 h-4" />
             </button>
-
-            {/* Quick Export / Download Button */}
-            <button
-              onClick={() => setShowExportModal(true)}
-              className="bg-[#00F5FF]/10 text-[#00F5FF] border border-[#00F5FF]/40 hover:bg-[#00F5FF] hover:text-black font-bold uppercase px-2 py-1 rounded text-[9.5px] transition-all flex items-center gap-1 ml-1"
-              title="Download finished subtitled video"
-            >
-              <Download className="w-3 h-3" />
-              Download
-            </button>
           </div>
         </div>
       </div>
-
-      <ExportVideoModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} />
     </div>
   );
 }
