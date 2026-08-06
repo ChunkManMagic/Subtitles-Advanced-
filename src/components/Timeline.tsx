@@ -145,7 +145,7 @@ export function Timeline() {
                       }}
                     >
                       <span className="bg-black/60 text-[#00F5FF] text-[8px] px-1 py-0.2 rounded font-mono font-bold mr-1 shrink-0 flex items-center gap-0.5 border border-[#313135]">
-                        {sub.detectedLanguageCode.toUpperCase()}
+                        {(sub.detectedLanguageCode || sub.detectedLanguage || 'EN').toUpperCase()}
                       </span>
 
                       <span className="text-[9px] font-sans font-medium truncate flex-1 text-white">

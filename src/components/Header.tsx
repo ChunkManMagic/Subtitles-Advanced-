@@ -27,7 +27,9 @@ export function Header() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
 
-  const detectedLangs = Array.from(new Set(subtitles.map(s => s.detectedLanguageCode.toUpperCase()))).join(', ');
+  const detectedLangs = Array.from(new Set(
+    (subtitles || []).map(s => (s?.detectedLanguageCode || s?.detectedLanguage || 'EN').toUpperCase())
+  )).join(', ');
   const { isProcessing, overallProgress, statusMessage, stages, currentStage } = taskManager;
 
   return (

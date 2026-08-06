@@ -366,7 +366,7 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
                   />
                 </div>
                 <p className="text-[10px] text-slate-500 font-mono">
-                  Processing active subtitle cues at selected placement ({subtitleStyleSettings.position.toUpperCase()} Y:{subtitleStyleSettings.yOffsetPercent}%)...
+                  Processing active subtitle cues at selected placement ({(subtitleStyleSettings?.position || 'bottom').toUpperCase()} Y:{subtitleStyleSettings?.yOffsetPercent || 85}%)...
                 </p>
               </div>
             ) : exportedVideoUrl ? (

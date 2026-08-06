@@ -170,7 +170,7 @@ export function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
               });
 
               const langs = Array.from(new Set(
-                (item.subtitles || []).map(s => (s.detectedLanguage || 'English').toUpperCase())
+                (item.subtitles || []).map(s => (s?.detectedLanguage || s?.detectedLanguageCode || 'English').toUpperCase())
               )).slice(0, 4).join(', ');
 
               return (
