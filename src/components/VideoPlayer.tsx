@@ -22,7 +22,7 @@ export function VideoPlayer() {
     subtitles: state.subtitles,
     currentTime: state.currentTime,
     setCurrentTime: state.setCurrentTime,
-    currentProject: state.currentProject,
+    currentProject: state.project,
   }));
 
   // Synchronize play state locally on the video element

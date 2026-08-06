@@ -9,7 +9,7 @@ import { AudioWaveformVisualizer } from './components/AudioWaveformVisualizer';
 import { Menu, X, Settings, Layers, Film } from 'lucide-react';
 
 export default function App() {
-  const currentProject = useStore((state) => state.currentProject);
+  const currentProject = useStore((state) => state.project);
   const [mobileTab, setMobileTab] = useState<'preview' | 'timeline'>('preview');
   const [showMobileSettings, setShowMobileSettings] = useState(false);
 
