@@ -36,10 +36,10 @@ echo "==================================================="
 node server_node.js &
 NODE_PID=$!
 
-# Automatically open default Android web browser on start (using port 3005)
+# Automatically open default Android web browser on start (using raw IP 127.0.0.1:3005)
 if command -v termux-open &> /dev/null; then
     echo "[*] Launching your default browser..."
-    (sleep 2 && termux-open http://localhost:3005) &
+    (sleep 2 && termux-open http://127.0.0.1:3005) &
 fi
 
 # Keep script running and listen for termination to clean up process
