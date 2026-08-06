@@ -33,7 +33,7 @@ echo ""
 echo "==================================================="
 echo "[+] Starting the Node.js Backend Server (Port 3005)..."
 echo "==================================================="
-node server_node.js &
+node server_node.cjs &
 NODE_PID=$!
 
 # Automatically open default Android web browser on start (using raw IP 127.0.0.1:3005)
