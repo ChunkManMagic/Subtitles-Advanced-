@@ -13,17 +13,10 @@ export function VideoPlayer() {
   const [volume, setVolume] = useState(1);
   const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
 
-  const {
-    subtitles,
-    currentTime,
-    setCurrentTime,
-    currentProject,
-  } = useStore((state) => ({
-    subtitles: state.subtitles,
-    currentTime: state.currentTime,
-    setCurrentTime: state.setCurrentTime,
-    currentProject: state.project,
-  }));
+  const subtitles = useStore((state) => state.subtitles);
+  const currentTime = useStore((state) => state.currentTime);
+  const setCurrentTime = useStore((state) => state.setCurrentTime);
+  const currentProject = useStore((state) => state.project);
 
   // Synchronize play state locally on the video element
   useEffect(() => {
