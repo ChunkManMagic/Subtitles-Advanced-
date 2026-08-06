@@ -1,20 +1,19 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const multer = require('express-form-data');
 
 const app = express();
-const PORT = process.env.PORT || 3005; // Switched to 3005 to avoid conflicts on port 3000
+const PORT = process.env.PORT || 3005;
 
 app.use(cors());
 app.use(express.json());
-app.use(multer.parse());
 
 // Serve static assets from our Vite build in production/fallback mode
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // API translation endpoint fallback matching standard server endpoints
-app.post('/api/translate', async (req, res) => {
+// Completely avoids body-parsing of large video files to bypass Termux temp folder crashes
+app.post('/api/translate', (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
