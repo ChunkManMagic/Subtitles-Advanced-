@@ -48,5 +48,10 @@ echo ===================================================
 echo [+] Launching the Vite Frontend Server (Port 5173)...
 echo ===================================================
 echo.
+
+:: Automatically open default web browser locally
+echo [*] Automatically opening Subtitles Advanced in your web browser...
+start http://localhost:5173
+
 call bun run dev
 pause

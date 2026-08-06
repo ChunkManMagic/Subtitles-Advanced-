@@ -39,6 +39,14 @@ echo "==================================================="
 echo "[+] Launching the Vite Frontend Server (Port 5173)..."
 echo "==================================================="
 echo ""
+
+# Automatically open default web browser locally on start
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    (sleep 1.5 && open http://localhost:5173) &
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    (sleep 1.5 && xdg-open http://localhost:5173) &
+fi
+
 bun run dev
 
 # Terminate the backend server when the frontend exits
