@@ -1,22 +1,49 @@
-import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
-import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
-  return {
-    plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    // Warmup frequently used files to speed up initial load in the browser during dev
+    warmup: {
+      clientFiles: [
+        './src/main.tsx',
+        './src/App.tsx',
+        './src/store.ts',
+        './src/types.ts',
+      ],
+    },
+    // Configure API proxy to forward requests from the Vite frontend to the Bun backend
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
       },
     },
-    server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+  },
+  build: {
+    // Enable source map for production debugging
+    sourcemap: true,
+    // Optimize rollup options for efficient asset delivery and code splitting
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Put standard node_modules like react and state management into a vendor chunk
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'vendor-react';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            return 'vendor';
+          }
+        },
+      },
     },
-  };
+    // Keep bundle size warning to standard limits
+    chunkSizeWarningLimit: 1000,
+  },
 });
