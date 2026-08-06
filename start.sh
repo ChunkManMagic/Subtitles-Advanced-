@@ -41,9 +41,12 @@ echo "==================================================="
 echo ""
 
 # Automatically open default web browser locally on start
-if [[ "$OSTYPE" == "darwin"* ]]; then
+# Adds fallback check for Android Termux (termux-open) and standard Linux (xdg-open)
+if command -v termux-open &> /dev/null; then
+    (sleep 1.5 && termux-open http://localhost:5173) &
+elif [[ "$OSTYPE" == "darwin"* ]]; then
     (sleep 1.5 && open http://localhost:5173) &
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+elif command -v xdg-open &> /dev/null; then
     (sleep 1.5 && xdg-open http://localhost:5173) &
 fi
 
