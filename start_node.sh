@@ -21,7 +21,7 @@ if [ ! -f .env ]; then
 fi
 
 echo "[*] Installing Node.js fallback server dependencies..."
-npm install express cors express-form-data
+npm install express cors
 
 echo "[*] Installing project build dependencies..."
 npm install
