@@ -31,15 +31,15 @@ npm run build
 
 echo ""
 echo "==================================================="
-echo "[+] Starting the Node.js Backend Server (Port 3000)..."
+echo "[+] Starting the Node.js Backend Server (Port 3005)..."
 echo "==================================================="
 node server_node.js &
 NODE_PID=$!
 
-# Automatically open default Android web browser on start
+# Automatically open default Android web browser on start (using port 3005)
 if command -v termux-open &> /dev/null; then
     echo "[*] Launching your default browser..."
-    (sleep 2 && termux-open http://localhost:3000) &
+    (sleep 2 && termux-open http://localhost:3005) &
 fi
 
 # Keep script running and listen for termination to clean up process
