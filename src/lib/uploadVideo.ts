@@ -1,28 +1,44 @@
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries: number = 5,
-  initialDelayMs: number = 1200
+  maxRetries: number = 8,
+  initialDelayMs: number = 1000,
+  timeoutMs: number = 60000
 ): Promise<Response> {
   let lastErr: any;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       if (response.ok) {
         return response;
       }
-      // If server returned 500, 502, 503, 504, 429 or similar transient error, retry
+
+      // If server returned 500, 502, 503, 504, 429 or transient error, retry with exponential backoff
       if ([500, 502, 503, 504, 429].includes(response.status) && attempt < maxRetries) {
-        console.warn(`[Upload Retry] ${url} returned ${response.status}, retrying (${attempt}/${maxRetries})...`);
-        await new Promise((resolve) => setTimeout(resolve, initialDelayMs * attempt));
+        const delay = Math.min(12000, Math.round(initialDelayMs * Math.pow(1.5, attempt - 1)));
+        console.warn(`[Upload Retry] ${url} returned ${response.status}, retrying in ${delay}ms (${attempt}/${maxRetries})...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       return response;
     } catch (err: any) {
+      clearTimeout(timeoutId);
       lastErr = err;
-      console.warn(`[Upload Network Error] ${url} attempt ${attempt}/${maxRetries}:`, err?.message || err);
+      const isAbort = err?.name === 'AbortError';
+      const errMsg = isAbort ? 'Request timeout (60s)' : (err?.message || err);
+      console.warn(`[Upload Network Error] ${url} attempt ${attempt}/${maxRetries}: ${errMsg}`);
+
       if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, initialDelayMs * attempt));
+        const delay = Math.min(12000, Math.round(initialDelayMs * Math.pow(1.5, attempt - 1)));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
@@ -36,10 +52,10 @@ export async function uploadAndTranslateVideo(
 ): Promise<any> {
   const size = fileOrBlob.size;
   const mimeType = fileOrBlob.type || 'video/mp4';
-  const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB chunks for optimal speed and reliability
+  const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for max reliability on all networks
 
-  // For small Files (< 10MB), direct upload is fast
-  if (size <= 10 * 1024 * 1024 && fileOrBlob instanceof File) {
+  // For small Files (< 8MB), direct upload is fast
+  if (size <= 8 * 1024 * 1024 && fileOrBlob instanceof File) {
     const formData = new FormData();
     formData.append('video', fileOrBlob);
     onProgress?.(30);
@@ -49,9 +65,9 @@ export async function uploadAndTranslateVideo(
       response = await fetchWithRetry('/api/translate-video', {
         method: 'POST',
         body: formData,
-      }, 3);
+      }, 5);
     } catch (netErr: any) {
-      throw new Error("Unable to connect to the video processing server. Please check your network or try again.");
+      throw new Error("Unable to connect to the video processing server. Please check your network connection and try again.");
     }
 
     if (!response.ok) {
@@ -84,9 +100,9 @@ export async function uploadAndTranslateVideo(
       chunkRes = await fetchWithRetry('/api/upload-chunk', {
         method: 'POST',
         body: formData,
-      }, 5); // Retry up to 5 times per chunk
+      }, 8); // Retry up to 8 times per chunk
     } catch (netErr) {
-      throw new Error(`Failed uploading chunk ${i + 1}/${totalChunks} after multiple retries. Please verify your connection.`);
+      throw new Error(`Failed uploading chunk ${i + 1}/${totalChunks} after multiple retries. Please verify your internet connection.`);
     }
 
     if (!chunkRes.ok) {
@@ -112,7 +128,7 @@ export async function uploadAndTranslateVideo(
         totalChunks,
         mimeType,
       }),
-    }, 4, 3000);
+    }, 5, 3000, 180000); // 3-minute timeout for processing complete video with AI
   } catch (netErr) {
     throw new Error("Network connection lost during video AI analysis. Please try again.");
   }

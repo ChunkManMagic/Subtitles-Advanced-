@@ -49,7 +49,7 @@ function getAI() {
 // Multer for handling file uploads
 const upload = multer({ 
   dest: tmpdir(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB per chunk or direct upload
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB max per upload or chunk
 });
 
 async function hashFile(filePath: string): Promise<string> {
@@ -367,12 +367,30 @@ Respond ONLY with the JSON array, nothing else. No markdown formatting.`;
       }
 
       const chunkPath = path.join(chunkDir, `chunk_${chunkIndex}`);
-      fs.renameSync(req.file.path, chunkPath);
+
+      // If chunk already exists and matches uploaded size, return success immediately
+      if (fs.existsSync(chunkPath) && fs.statSync(chunkPath).size === req.file.size) {
+        res.json({ success: true, chunkIndex: parseInt(chunkIndex, 10), cached: true });
+        return;
+      }
+
+      // Copy file to avoid cross-device partition link errors (EXDEV)
+      fs.copyFileSync(req.file.path, chunkPath);
 
       res.json({ success: true, chunkIndex: parseInt(chunkIndex, 10) });
     } catch (error: any) {
       console.error("Error in /api/upload-chunk:", error);
       res.status(500).json({ error: error.message || "Failed to upload chunk" });
+    } finally {
+      if (req.file && req.file.path) {
+        try {
+          if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
+        } catch (e) {
+          // Ignore temp file cleanup error
+        }
+      }
     }
   });
 
