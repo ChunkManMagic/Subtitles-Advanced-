@@ -92,7 +92,8 @@ const INITIAL_SUBTITLES: Subtitle[] = [
 const SAMPLE_PROJECT: Project = {
   id: 'proj-sample-1',
   name: 'Multi_Lang_Presentation_to_English.mp4',
-  duration: 22.0
+  duration: 22.0,
+  videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
 };
 
 const SAMPLE_TRACKS: Track[] = [
@@ -106,7 +107,8 @@ const SAMPLE_TRACKS: Track[] = [
         type: 'video',
         startTime: 0,
         duration: 22,
-        name: 'multi_language_source.mp4'
+        name: 'multi_language_source.mp4',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
       }
     ]
   },

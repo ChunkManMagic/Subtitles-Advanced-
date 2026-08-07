@@ -17,6 +17,10 @@ export function VideoPlayer() {
   const currentTime = useStore((state) => state.currentTime);
   const setCurrentTime = useStore((state) => state.setCurrentTime);
   const currentProject = useStore((state) => state.project);
+  const tracks = useStore((state) => state.tracks);
+
+  const videoTrackItem = tracks.find(t => t.type === 'video' || t.type === 'audio')?.items[0];
+  const videoSourceUrl = currentProject?.videoUrl || videoTrackItem?.url || (videoTrackItem?.file ? URL.createObjectURL(videoTrackItem.file) : undefined);
 
   // Synchronize play state locally on the video element
   useEffect(() => {
@@ -142,10 +146,10 @@ export function VideoPlayer() {
   return (
     <div className="relative w-full aspect-video bg-[#050507] rounded-xl overflow-hidden group shadow-2xl border border-white/5 flex flex-col justify-center items-center">
       {/* Video Stream Element */}
-      {currentProject?.videoUrl ? (
+      {videoSourceUrl ? (
         <video
           ref={videoRef}
-          src={currentProject.videoUrl}
+          src={videoSourceUrl}
           className="w-full h-full object-contain"
           playsInline
           onClick={togglePlay}

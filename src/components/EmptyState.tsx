@@ -61,6 +61,7 @@ export function EmptyState() {
             id: '1',
             name: file.name,
             duration: duration,
+            videoUrl: url,
           });
 
           addTrack({

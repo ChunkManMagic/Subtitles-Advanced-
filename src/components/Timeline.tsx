@@ -157,12 +157,6 @@ export function Timeline() {
               </div>
             ))}
           </div>
-          
-          <div className="mt-4 px-2 mb-4" style={{ width: Math.max(duration * pixelsPerSecond, 800) }}>
-            <AudioWaveformVisualizer 
-              audioUrl={tracks.find(t => t.type === 'video' || t.type === 'audio')?.items[0]?.url}
-            />
-          </div>
         </div>
       </div>
     </div>
