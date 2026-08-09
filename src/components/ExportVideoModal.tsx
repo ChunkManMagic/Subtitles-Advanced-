@@ -114,7 +114,7 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
     URL.revokeObjectURL(url);
   };
 
-  // 4. Burn-in Subtitles & Record Video Stream
+  // 4. Burn-in Subtitles & Record Video Stream Safely
   const handleRenderBurnedInVideo = async () => {
     if (!videoUrl) {
       setExportError("No source video found to render.");
@@ -130,10 +130,18 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
     video.src = videoUrl;
     video.crossOrigin = "anonymous";
     video.muted = false;
+    video.playsInline = true;
 
-    await new Promise((resolve) => {
-      video.onloadeddata = resolve;
-    });
+    try {
+      await new Promise((resolve, reject) => {
+        video.onloadeddata = resolve;
+        video.onerror = (e) => reject(new Error("Failed to load source video for rendering."));
+      });
+    } catch (err: any) {
+      setExportError(err.message || "Video loading error.");
+      setIsExportingVideo(false);
+      return;
+    }
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -148,7 +156,6 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
     canvas.width = width;
     canvas.height = height;
 
-    // Web Audio setup for audio capture
     let audioCtx: AudioContext | null = null;
     let sourceNode: MediaElementAudioSourceNode | null = null;
     let destNode: MediaStreamAudioDestinationNode | null = null;
@@ -160,7 +167,7 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
       sourceNode.connect(destNode);
       sourceNode.connect(audioCtx.destination);
     } catch (e) {
-      console.warn("Web Audio API routing notice:", e);
+      console.warn("Web Audio routing bypass warning:", e);
     }
 
     const canvasStream = canvas.captureStream(30);
@@ -180,7 +187,14 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
     try {
       mediaRecorder = new MediaRecorder(canvasStream, { mimeType });
     } catch (err) {
-      mediaRecorder = new MediaRecorder(canvasStream);
+      try {
+        mediaRecorder = new MediaRecorder(canvasStream);
+      } catch (fallbackErr) {
+        setExportError("MediaRecorder initialization failed on this browser.");
+        setIsExportingVideo(false);
+        if (audioCtx) audioCtx.close();
+        return;
+      }
     }
 
     mediaRecorder.ondataavailable = (e) => {
@@ -190,20 +204,40 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
     };
 
     mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mimeType });
-      const createdUrl = URL.createObjectURL(blob);
-      setExportedVideoUrl(createdUrl);
-      setIsExportingVideo(false);
-      setExportProgress(100);
+      try {
+        const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
+        const createdUrl = URL.createObjectURL(blob);
+        setExportedVideoUrl(createdUrl);
+        setIsExportingVideo(false);
+        setExportProgress(100);
+      } catch (err) {
+        setExportError("Failed to assemble final video blob.");
+        setIsExportingVideo(false);
+      }
 
-      if (audioCtx) {
+      if (audioCtx && audioCtx.state !== 'closed') {
         audioCtx.close();
       }
     };
 
-    mediaRecorder.start();
-    video.currentTime = 0;
-    await video.play();
+    mediaRecorder.onerror = (event: any) => {
+      setExportError("MediaRecorder error encountered during export.");
+      setIsExportingVideo(false);
+      if (audioCtx && audioCtx.state !== 'closed') {
+        audioCtx.close();
+      }
+    };
+
+    try {
+      mediaRecorder.start(1000); // Collect data chunks every second to avoid memory bloat
+      video.currentTime = 0;
+      await video.play();
+    } catch (playErr) {
+      setExportError("Playback restriction prevented automatic video rendering.");
+      setIsExportingVideo(false);
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      return;
+    }
 
     const duration = video.duration || project?.duration || 30;
 
@@ -226,25 +260,21 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
       if (activeSub) {
         const text = getActiveText(activeSub);
         
-        // Render subtitle with active placement settings
         ctx.save();
         
-        // Font sizing relative to canvas height
-        let fontSizePx = Math.round(height * 0.042); // medium
+        let fontSizePx = Math.round(height * 0.042);
         if (subtitleStyleSettings.fontSize === 'small') fontSizePx = Math.round(height * 0.032);
         if (subtitleStyleSettings.fontSize === 'large') fontSizePx = Math.round(height * 0.055);
         if (subtitleStyleSettings.fontSize === 'xlarge') fontSizePx = Math.round(height * 0.068);
 
         ctx.font = `bold ${fontSizePx}px sans-serif`;
 
-        // Position calculation
-        let yPos = (height * subtitleStyleSettings.yOffsetPercent) / 100;
-        let xPos = (width * subtitleStyleSettings.xOffsetPercent) / 100;
+        let yPos = (height * (subtitleStyleSettings.yOffsetPercent || 85)) / 100;
+        let xPos = (width * (subtitleStyleSettings.xOffsetPercent || 50)) / 100;
 
         ctx.textAlign = subtitleStyleSettings.alignment || 'center';
         ctx.textBaseline = 'middle';
 
-        // Measure text padding & background box
         const textMetrics = ctx.measureText(text);
         const textWidth = textMetrics.width;
         const paddingX = fontSizePx * 0.8;
@@ -258,14 +288,13 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
         const boxHeight = fontSizePx + (paddingY * 2);
         const boxY = yPos - (boxHeight / 2);
 
-        // Draw Background Box according to style
         if (subtitleStyleSettings.bgStyle === 'solid_black') {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
           ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
         } else if (subtitleStyleSettings.bgStyle === 'yellow_box') {
           ctx.fillStyle = 'rgba(250, 204, 21, 0.95)';
           ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-        } else if (subtitleStyleSettings.bgStyle === 'dark_glass' || !subtitleStyleSettings.bgStyle) {
+        } else {
           ctx.fillStyle = 'rgba(10, 10, 12, 0.82)';
           ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
           ctx.strokeStyle = 'rgba(0, 245, 255, 0.6)';
@@ -273,20 +302,11 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
           ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
         }
 
-        // Draw Text Color
-        let fillTextColor = '#FACC15'; // default yellow
+        let fillTextColor = '#FACC15';
         if (subtitleStyleSettings.bgStyle === 'yellow_box') fillTextColor = '#000000';
         else if (subtitleStyleSettings.textColor === 'white') fillTextColor = '#FFFFFF';
         else if (subtitleStyleSettings.textColor === 'cyan') fillTextColor = '#00F5FF';
         else if (subtitleStyleSettings.textColor === 'lime') fillTextColor = '#4ADE80';
-
-        if (subtitleStyleSettings.bgStyle === 'text_shadow') {
-          ctx.shadowColor = 'black';
-          ctx.shadowBlur = 8;
-          ctx.lineWidth = fontSizePx * 0.15;
-          ctx.strokeStyle = 'black';
-          ctx.strokeText(text, xPos, yPos);
-        }
 
         ctx.fillStyle = fillTextColor;
         ctx.fillText(text, xPos, yPos);
@@ -327,7 +347,7 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
-          {/* Main Download Option: Finished Video with Burned-In Easy-Read Subtitles */}
+          {/* Main Download Option */}
           <div className="p-5 rounded-xl bg-gradient-to-br from-[#1A1A1D] to-[#121214] border border-[#00F5FF]/40 relative overflow-hidden shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
@@ -366,7 +386,7 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
                   />
                 </div>
                 <p className="text-[10px] text-slate-500 font-mono">
-                  Processing active subtitle cues at selected placement ({(subtitleStyleSettings?.position || 'bottom').toUpperCase()} Y:{subtitleStyleSettings?.yOffsetPercent || 85}%)...
+                  Processing active subtitle cues at selected placement...
                 </p>
               </div>
             ) : exportedVideoUrl ? (
@@ -417,7 +437,6 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* SRT */}
               <button
                 onClick={handleExportSRT}
                 className="p-3.5 rounded-xl bg-[#18181B] border border-[#2B2B30] hover:border-[#00F5FF]/60 hover:bg-[#1E1E22] transition-all text-left flex flex-col justify-between gap-3 group"
@@ -436,7 +455,6 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
                 </div>
               </button>
 
-              {/* VTT */}
               <button
                 onClick={handleExportVTT}
                 className="p-3.5 rounded-xl bg-[#18181B] border border-[#2B2B30] hover:border-[#00F5FF]/60 hover:bg-[#1E1E22] transition-all text-left flex flex-col justify-between gap-3 group"
@@ -455,7 +473,6 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
                 </div>
               </button>
 
-              {/* TXT Transcript */}
               <button
                 onClick={handleExportTXT}
                 className="p-3.5 rounded-xl bg-[#18181B] border border-[#2B2B30] hover:border-[#00F5FF]/60 hover:bg-[#1E1E22] transition-all text-left flex flex-col justify-between gap-3 group"
@@ -466,28 +483,4 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
                     <FileText className="w-4 h-4 text-slate-500 group-hover:text-[#00F5FF]" />
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    Plain text transcript of all translated English segments with speaker timecodes.
-                  </p>
-                </div>
-                <div className="text-[11px] font-bold text-[#00F5FF] uppercase flex items-center gap-1">
-                  Download TXT <Download className="w-3 h-3" />
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 px-6 border-t border-[#26262a] bg-[#0D0D0E] flex justify-between items-center text-xs text-slate-500">
-          <span>{subtitles.length} translated subtitle cues ready for export.</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-[#26262a] text-slate-300 hover:text-white hover:bg-[#313135] transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+                    Plain text transcript of all translated English segments with speake
