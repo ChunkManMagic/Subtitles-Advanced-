@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    hmr: false,
     // Warmup frequently used files to speed up initial load in the browser during dev
     warmup: {
       clientFiles: [

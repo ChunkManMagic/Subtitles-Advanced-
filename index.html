@@ -8,11 +8,19 @@
     <script>
       // Global Error Catcher for premium debugging of mobile browser white-screen crashes
       window.addEventListener('error', function(event) {
-        renderErrorBox('JavaScript Error', event.message, event.filename + ':' + event.lineno + ':' + event.colno, event.error ? event.error.stack : '');
+        var msg = (event.message || '').toString();
+        if (msg.includes('WebSocket') || msg.includes('vite') || msg.includes('HMR') || msg.includes('websocket')) {
+          return; // Ignore benign Vite dev server HMR websocket drops
+        }
+        renderErrorBox('JavaScript Error', msg, event.filename + ':' + event.lineno + ':' + event.colno, event.error ? event.error.stack : '');
       });
 
       window.addEventListener('unhandledrejection', function(event) {
-        renderErrorBox('Unhandled Rejection', event.reason ? event.reason.message || event.reason : 'Promise Rejected', '', event.reason ? event.reason.stack : '');
+        var msg = (event.reason ? event.reason.message || event.reason : '').toString();
+        if (msg.includes('WebSocket') || msg.includes('vite') || msg.includes('HMR') || msg.includes('websocket')) {
+          return; // Ignore benign Vite dev server HMR websocket drops
+        }
+        renderErrorBox('Unhandled Rejection', msg || 'Promise Rejected', '', event.reason ? event.reason.stack : '');
       });
 
       function renderErrorBox(title, message, location, stack) {
