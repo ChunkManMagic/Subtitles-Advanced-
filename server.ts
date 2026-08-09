@@ -356,8 +356,9 @@ Respond ONLY with the JSON array, nothing else. No markdown formatting.`;
   app.post("/api/upload-chunk", upload.single("chunk"), async (req, res) => {
     try {
       const { uploadId, chunkIndex, totalChunks } = req.body;
-      if (!req.file || !uploadId || chunkIndex === undefined) {
-        res.status(400).json({ error: "Missing chunk data" });
+      if (!req.file || !uploadId || chunkIndex === undefined || chunkIndex === null || chunkIndex === '') {
+        console.warn(`[upload-chunk] Missing parameter - req.file: ${!!req.file}, uploadId: ${uploadId}, chunkIndex: ${chunkIndex}`);
+        res.status(400).json({ error: "Missing chunk upload metadata or file" });
         return;
       }
 

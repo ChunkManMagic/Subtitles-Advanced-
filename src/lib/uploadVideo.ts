@@ -21,9 +21,9 @@ async function fetchWithRetry(
         return response;
       }
 
-      // If server returned 500, 502, 503, 504, 429 or transient error, retry with exponential backoff
-      if ([500, 502, 503, 504, 429].includes(response.status) && attempt < maxRetries) {
-        const delay = Math.min(12000, Math.round(initialDelayMs * Math.pow(1.5, attempt - 1)));
+      // Retry on server errors or transient chunk parsing glitches (400, 408, 429, 500, 502, 503, 504)
+      if ([400, 408, 429, 500, 502, 503, 504].includes(response.status) && attempt < maxRetries) {
+        const delay = Math.min(10000, Math.round(initialDelayMs * Math.pow(1.5, attempt - 1)));
         console.warn(`[Upload Retry] ${url} returned ${response.status}, retrying in ${delay}ms (${attempt}/${maxRetries})...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
@@ -37,7 +37,7 @@ async function fetchWithRetry(
       console.warn(`[Upload Network Error] ${url} attempt ${attempt}/${maxRetries}: ${errMsg}`);
 
       if (attempt < maxRetries) {
-        const delay = Math.min(12000, Math.round(initialDelayMs * Math.pow(1.5, attempt - 1)));
+        const delay = Math.min(10000, Math.round(initialDelayMs * Math.pow(1.5, attempt - 1)));
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -54,8 +54,8 @@ export async function uploadAndTranslateVideo(
   const mimeType = fileOrBlob.type || 'video/mp4';
   const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for max reliability on all networks
 
-  // For small Files (< 8MB), direct upload is fast
-  if (size <= 8 * 1024 * 1024 && fileOrBlob instanceof File) {
+  // For small Files (< 12MB), direct upload is fast and avoids chunking overhead
+  if (size <= 12 * 1024 * 1024 && fileOrBlob instanceof File) {
     const formData = new FormData();
     formData.append('video', fileOrBlob);
     onProgress?.(30);
@@ -90,10 +90,11 @@ export async function uploadAndTranslateVideo(
     const chunk = fileOrBlob.slice(start, end);
 
     const formData = new FormData();
-    formData.append('chunk', chunk, `${fileName}.part${i}`);
+    // MUST append text metadata BEFORE binary chunk file so Multer parses req.body before req.file
     formData.append('uploadId', uploadId);
     formData.append('chunkIndex', i.toString());
     formData.append('totalChunks', totalChunks.toString());
+    formData.append('chunk', chunk, `${fileName}.part${i}`);
 
     let chunkRes: Response;
     try {
