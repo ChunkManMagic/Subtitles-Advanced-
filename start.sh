@@ -29,7 +29,28 @@ bun install
 
 echo ""
 echo "==================================================="
-echo "[+] Ready to go! Launching your app..."
+echo "[+] Starting the Bun Backend Server (Port 3000)..."
+echo "==================================================="
+bun server.ts &
+BACKEND_PID=$!
+
+echo ""
+echo "==================================================="
+echo "[+] Launching the Vite Frontend Server (Port 5173)..."
 echo "==================================================="
 echo ""
+
+# Automatically open default web browser locally on start
+# Adds fallback check for Android Termux (termux-open) and standard Linux (xdg-open)
+if command -v termux-open &> /dev/null; then
+    (sleep 1.5 && termux-open http://localhost:5173) &
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    (sleep 1.5 && open http://localhost:5173) &
+elif command -v xdg-open &> /dev/null; then
+    (sleep 1.5 && xdg-open http://localhost:5173) &
+fi
+
 bun run dev
+
+# Terminate the backend server when the frontend exits
+kill $BACKEND_PID

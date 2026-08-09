@@ -1,0 +1,21 @@
+{
+  "entities": {
+    "ProcessedVideo": {
+      "title": "ProcessedVideo",
+      "description": "A cache of translated subtitles for a given video.",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string" },
+        "subtitles": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["videoId", "subtitles", "createdAt"]
+    }
+  },
+  "firestore": {
+    "processed_videos/{videoId}": {
+      "schema": { "$ref": "#/entities/ProcessedVideo" },
+      "description": "Cache of processed video subtitles"
+    }
+  }
+}

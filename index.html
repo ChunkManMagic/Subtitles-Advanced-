@@ -2,12 +2,63 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Subtitles Advanced</title>
+    <script>
+      // Global Error Catcher for premium debugging of mobile browser white-screen crashes
+      window.addEventListener('error', function(event) {
+        var msg = (event.message || '').toString();
+        if (msg.includes('WebSocket') || msg.includes('vite') || msg.includes('HMR') || msg.includes('websocket')) {
+          return; // Ignore benign Vite dev server HMR websocket drops
+        }
+        renderErrorBox('JavaScript Error', msg, event.filename + ':' + event.lineno + ':' + event.colno, event.error ? event.error.stack : '');
+      });
+
+      window.addEventListener('unhandledrejection', function(event) {
+        var msg = (event.reason ? event.reason.message || event.reason : '').toString();
+        if (msg.includes('WebSocket') || msg.includes('vite') || msg.includes('HMR') || msg.includes('websocket')) {
+          return; // Ignore benign Vite dev server HMR websocket drops
+        }
+        renderErrorBox('Unhandled Rejection', msg || 'Promise Rejected', '', event.reason ? event.reason.stack : '');
+      });
+
+      function renderErrorBox(title, message, location, stack) {
+        // Only render if we haven't already replaced the body
+        if (document.getElementById('debug-error-overlay')) return;
+        
+        var div = document.createElement('div');
+        div.id = 'debug-error-overlay';
+        div.style.position = 'fixed';
+        div.style.inset = '0';
+        div.style.zIndex = '99999';
+        div.style.backgroundColor = '#0c0202';
+        div.style.color = '#f87171';
+        div.style.padding = '24px';
+        div.style.fontFamily = 'monospace';
+        div.style.fontSize = '12px';
+        div.style.lineHeight = '1.5';
+        div.style.overflowY = 'auto';
+        div.style.border = '4px solid #ef4444';
+        
+        div.innerHTML = 
+          '<h1 style="color:#ef4444;font-size:18px;margin-bottom:12px;font-weight:bold;">🚨 ' + title + '</h1>' +
+          '<div style="background-color:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);padding:16px;border-radius:12px;margin-bottom:16px;">' +
+          '  <div style="font-weight:bold;color:#fca5a5;margin-bottom:4px;">Message:</div>' +
+          '  <div style="color:#fecaca;margin-bottom:12px;word-break:break-all;">' + message + '</div>' +
+          (location ? '  <div style="font-weight:bold;color:#fca5a5;margin-bottom:4px;">Location:</div>' +
+          '  <div style="color:#fecaca;margin-bottom:12px;word-break:break-all;">' + location + '</div>' : '') +
+          '</div>' +
+          (stack ? '<div style="font-weight:bold;color:#fca5a5;margin-bottom:4px;">Stack Trace:</div>' +
+          '<pre style="background-color:#110202;padding:16px;border-radius:12px;border:1px solid rgba(239,68,68,0.2);overflow-x:auto;color:#fca5a5;white-space:pre-wrap;font-size:11px;">' + stack + '</pre>' : '') +
+          '<button onclick="window.location.reload()" style="margin-top:16px;padding:8px 16px;background-color:#ef4444;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;">Reload Page</button>';
+          
+        document.body.appendChild(div);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -39,8 +39,19 @@ if %errorlevel% neq 0 (
 
 echo.
 echo ===================================================
-echo [+] Ready to go! Launching your app...
+echo [+] Starting the Bun Backend Server (Port 3000)...
+echo ===================================================
+start "Subtitles Advanced Backend" bun server.ts
+
+echo.
+echo ===================================================
+echo [+] Launching the Vite Frontend Server (Port 5173)...
 echo ===================================================
 echo.
+
+:: Automatically open default web browser locally
+echo [*] Automatically opening Subtitles Advanced in your web browser...
+start http://localhost:5173
+
 call bun run dev
 pause

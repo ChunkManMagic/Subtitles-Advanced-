@@ -7,28 +7,22 @@ export function VideoPlayer() {
   const requestRef = useRef<number | null>(null);
   const lastStoreUpdateRef = useRef<number>(0);
 
-  const {
-    subtitles,
-    isPlaying,
-    setIsPlaying,
-    currentTime,
-    setCurrentTime,
-    currentProject,
-  } = useStore((state) => ({
-    subtitles: state.subtitles,
-    isPlaying: state.taskManager.isProcessing ? false : state.isPlaying,
-    setIsPlaying: state.setIsPlaying,
-    currentTime: state.currentTime,
-    setCurrentTime: state.setCurrentTime,
-    currentProject: state.currentProject,
-  }));
-
-  const [localIsPlaying, setLocalIsPlaying] = useState(false);
-  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
+  // Playback state is managed locally in the player to avoid global store re-render loops and missing store setter errors
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
 
-  // Synchronize play state from store
+  const subtitles = useStore((state) => state.subtitles);
+  const currentTime = useStore((state) => state.currentTime);
+  const setCurrentTime = useStore((state) => state.setCurrentTime);
+  const currentProject = useStore((state) => state.project);
+  const tracks = useStore((state) => state.tracks);
+
+  const videoTrackItem = tracks.find(t => t.type === 'video' || t.type === 'audio')?.items[0];
+  const videoSourceUrl = currentProject?.videoUrl || videoTrackItem?.url || (videoTrackItem?.file ? URL.createObjectURL(videoTrackItem.file) : undefined);
+
+  // Synchronize play state locally on the video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -40,9 +34,8 @@ export function VideoPlayer() {
       setLocalIsPlaying(true);
     } else {
       video.pause();
-      setLocalIsPlaying(false);
     }
-  }, [isPlaying, setIsPlaying]);
+  }, [isPlaying]);
 
   // Synchronize seek/time changes from store (e.g. dragging timeline cursor)
   useEffect(() => {
@@ -90,12 +83,6 @@ export function VideoPlayer() {
         // Run once on pause to make sure subtitle matches seeked frame
         updateLoop();
       }
-    }
-
-    return () => {
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
     };
   }, [isPlaying, subtitles, setCurrentTime]);
 
@@ -108,6 +95,16 @@ export function VideoPlayer() {
     } else {
       setIsPlaying(false);
     }
+
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, [isPlaying, subtitles, setCurrentTime]);
+
+  const togglePlay = () => {
+    setIsPlaying(prev => !prev);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,10 +158,10 @@ export function VideoPlayer() {
   return (
     <div className="relative w-full aspect-video bg-[#050507] rounded-xl overflow-hidden group shadow-2xl border border-white/5 flex flex-col justify-center items-center">
       {/* Video Stream Element */}
-      {currentProject?.videoUrl ? (
+      {videoSourceUrl ? (
         <video
           ref={videoRef}
-          src={currentProject.videoUrl}
+          src={videoSourceUrl}
           className="w-full h-full object-contain"
           playsInline
           onClick={togglePlay}
@@ -223,8 +220,8 @@ export function VideoPlayer() {
               onClick={togglePlay}
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl uppercase tracking-wider shadow-lg shadow-indigo-600/10 transition-all active:scale-95"
             >
-              {localIsPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-              {localIsPlaying ? 'Pause' : 'Play Video'}
+              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
+              {isPlaying ? 'Pause' : 'Play Video'}
             </button>
 
             <button

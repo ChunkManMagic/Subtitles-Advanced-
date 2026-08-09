@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { AppState, Project, Track, TranslationSettings, Subtitle, TaskManagerState, ProcessStage } from './types';
+import { uploadAndTranslateVideo } from './lib/uploadVideo';
 
 const INITIAL_TASK_MANAGER: TaskManagerState = {
   isProcessing: false,
@@ -91,7 +92,8 @@ const INITIAL_SUBTITLES: Subtitle[] = [
 const SAMPLE_PROJECT: Project = {
   id: 'proj-sample-1',
   name: 'Multi_Lang_Presentation_to_English.mp4',
-  duration: 22.0
+  duration: 22.0,
+  videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
 };
 
 const SAMPLE_TRACKS: Track[] = [
@@ -105,7 +107,8 @@ const SAMPLE_TRACKS: Track[] = [
         type: 'video',
         startTime: 0,
         duration: 22,
-        name: 'multi_language_source.mp4'
+        name: 'multi_language_source.mp4',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
       }
     ]
   },
@@ -135,6 +138,15 @@ export const useStore = create<AppState>((set, get) => ({
     autoDetectLanguage: true,
     simplifyJargon: false
   },
+  subtitleStyleSettings: {
+    position: 'bottom',
+    yOffsetPercent: 85,
+    xOffsetPercent: 50,
+    alignment: 'center',
+    fontSize: 'medium',
+    bgStyle: 'dark_glass',
+    textColor: 'yellow',
+  },
   subtitles: [],
   taskManager: INITIAL_TASK_MANAGER,
   
@@ -159,8 +171,34 @@ export const useStore = create<AppState>((set, get) => ({
   updateTranslationSettings: (settings) => set((state) => ({ 
     translationSettings: { ...state.translationSettings, ...settings } 
   })),
+  updateSubtitleStyleSettings: (settings) => set((state) => ({
+    subtitleStyleSettings: { ...state.subtitleStyleSettings, ...settings }
+  })),
   updateSubtitle: (id, data) => set((state) => ({
     subtitles: state.subtitles.map(s => s.id === id ? { ...s, ...data } : s)
+  })),
+  addSubtitleCue: () => set((state) => {
+    const lastSub = state.subtitles[state.subtitles.length - 1];
+    const newStart = lastSub ? Number((lastSub.endTime + 0.2).toFixed(1)) : 0;
+    const newEnd = Number((newStart + 3.5).toFixed(1));
+    const newSub: Subtitle = {
+      id: `sub-custom-${Date.now()}`,
+      startTime: newStart,
+      endTime: newEnd,
+      originalText: 'New subtitle cue',
+      detectedLanguage: 'English',
+      detectedLanguageCode: 'en',
+      confidence: 1.0,
+      translatedText: 'New translated subtitle',
+      simpleEnglishText: 'New translated subtitle',
+      cps: 12.0,
+      readingDifficulty: 'Easy',
+      languageShift: false
+    };
+    return { subtitles: [...state.subtitles, newSub] };
+  }),
+  deleteSubtitleCue: (id) => set((state) => ({
+    subtitles: state.subtitles.filter(s => s.id !== id)
   })),
   setSubtitles: (subtitles) => set({ subtitles }),
 
@@ -291,11 +329,90 @@ export const useStore = create<AppState>((set, get) => ({
     set({ taskManager: INITIAL_TASK_MANAGER });
   },
 
-  rescanAndTranslateToEnglish: () => {
+  loadHistoryProject: (item) => {
+    const subtitles = item.subtitles || [];
+    const maxEndTime = subtitles.length > 0 ? Math.max(...subtitles.map(s => s.endTime || 0)) : 30;
+    const duration = Math.max(10, maxEndTime + 2);
+
+    const tracks: Track[] = [
+      {
+        id: 'track-v1',
+        name: item.fileName || 'Restored Video',
+        type: 'video',
+        items: [{
+          id: 'item-v1',
+          type: 'video',
+          startTime: 0,
+          duration: duration,
+          name: item.fileName || 'Restored Video',
+          color: 'bg-blue-600'
+        }]
+      },
+      {
+        id: 'track-s1',
+        name: 'Easy-Read English Subtitles',
+        type: 'subtitle',
+        items: subtitles.map((s, idx) => ({
+          id: s.id || `sub-restored-${idx}`,
+          type: 'subtitle' as const,
+          startTime: s.startTime,
+          duration: Math.max(1, s.endTime - s.startTime),
+          name: s.translatedText || s.originalText || 'Subtitle',
+          color: 'bg-[#00F5FF]/20 text-[#00F5FF] border border-[#00F5FF]/50'
+        }))
+      }
+    ];
+
+    set({
+      project: {
+        id: item.videoId || `hist-${Date.now()}`,
+        name: item.fileName || 'Restored Translation Project',
+        duration,
+      },
+      subtitles,
+      tracks,
+      currentTime: 0,
+    });
+
+    get().completeTaskPipeline();
+    get().updateTaskProgress('asr_transcription', 100, 'Restored cached transcription');
+    get().updateTaskProgress('translation', 100, 'Restored Easy-Read English subtitles');
+  },
+
+  rescanAndTranslateToEnglish: async () => {
     set({ isScanningLanguages: true });
     get().startTaskPipeline('Auto-Detect Languages & Translate to English');
     get().setTaskStage('asr_transcription', 'WhisperX detecting speaker language shifts (ES, JA, FR, DE)...');
     get().updateTaskProgress('asr_transcription', 60, 'Diarizing multi-lingual audio channels...');
+
+    const videoTrack = get().tracks.find(t => t.type === 'video' || t.type === 'audio');
+    const videoItem = videoTrack?.items[0];
+
+    if (videoItem) {
+      try {
+        get().updateTaskProgress('asr_transcription', 100, 'All speaker shifts identified');
+        get().setTaskStage('translation', 'Gemini 3.6 Flash formatting subtitles into Easy-Read English...');
+        
+        let subtitles: any[] = [];
+        if (videoItem.file) {
+          subtitles = await uploadAndTranslateVideo(videoItem.file, videoItem.file.name);
+        } else if (videoItem.url) {
+          // If uploaded preloaded / blob URL without file handle
+          const blob = await fetch(videoItem.url).then(r => r.blob());
+          subtitles = await uploadAndTranslateVideo(blob, videoItem.name || 'video.mp4');
+        }
+
+        if (subtitles && Array.isArray(subtitles) && subtitles.length > 0) {
+          set({ subtitles });
+        }
+      } catch (e) {
+        console.error('Error during rescan:', e);
+      } finally {
+        set({ isScanningLanguages: false });
+        get().completeTaskPipeline();
+      }
+      return;
+    }
 
     setTimeout(() => {
       get().updateTaskProgress('asr_transcription', 100, 'All speaker shifts identified');
@@ -307,7 +424,7 @@ export const useStore = create<AppState>((set, get) => ({
         set((state) => ({
           isScanningLanguages: false,
           subtitles: state.subtitles.map(sub => {
-            const len = sub.translatedText.length;
+            const len = (sub.translatedText || '').length;
             const duration = Math.max(1, sub.endTime - sub.startTime);
             const cps = parseFloat((len / duration).toFixed(1));
             return {

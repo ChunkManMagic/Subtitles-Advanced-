@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
+    hmr: false,
     // Warmup frequently used files to speed up initial load in the browser during dev
     warmup: {
       clientFiles: [
@@ -13,6 +15,14 @@ export default defineConfig({
         './src/store.ts',
         './src/types.ts',
       ],
+    },
+    // Configure API proxy to forward requests from the Vite frontend to the Bun backend
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   build: {
