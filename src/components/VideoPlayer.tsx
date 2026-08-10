@@ -31,6 +31,7 @@ export function VideoPlayer() {
       video.play().catch(() => {
         setIsPlaying(false);
       });
+      setLocalIsPlaying(true);
     } else {
       video.pause();
     }
@@ -82,6 +83,17 @@ export function VideoPlayer() {
         // Run once on pause to make sure subtitle matches seeked frame
         updateLoop();
       }
+    };
+  }, [isPlaying, subtitles, setCurrentTime]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      setIsPlaying(true);
+    } else {
+      setIsPlaying(false);
     }
 
     return () => {
