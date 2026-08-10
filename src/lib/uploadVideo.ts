@@ -45,30 +45,247 @@ async function fetchWithRetry(
   throw lastErr || new Error(`Network request to ${url} failed after ${maxRetries} attempts.`);
 }
 
-export async function uploadAndTranslateVideo(
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * WebSocket Chunked Upload with Flow Control (ACK Backpressure) & Non-Blocking Ping/Pong Heartbeat
+ */
+async function uploadVideoViaWebSocket(
+  fileOrBlob: File | Blob,
+  fileName: string = 'video.mp4',
+  onProgress?: (progressPercent: number) => void
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws-upload`;
+    const ws = new WebSocket(wsUrl);
+
+    const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const size = fileOrBlob.size;
+    const mimeType = fileOrBlob.type || 'video/mp4';
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunk size for optimal flow control
+    const totalChunks = Math.ceil(size / CHUNK_SIZE);
+
+    let isClosed = false;
+    let pingInterval: any = null;
+
+    const ackResolverMap = new Map<number, { resolve: () => void; reject: (err: Error) => void }>();
+    let startAckResolver: { resolve: () => void; reject: (err: Error) => void } | null = null;
+    let completeResolver: { resolve: (subtitles: any) => void; reject: (err: Error) => void } | null = null;
+
+    const cleanup = () => {
+      isClosed = true;
+      if (pingInterval) clearInterval(pingInterval);
+      try {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+      } catch (_) {}
+    };
+
+    const connTimeout = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        cleanup();
+        reject(new Error('WebSocket connection timeout'));
+      }
+    }, 8000);
+
+    ws.onopen = async () => {
+      clearTimeout(connTimeout);
+
+      // 1. PARALLEL NON-BLOCKING HEARTBEAT PING/PONG LOOP
+      pingInterval = setInterval(() => {
+        if (!isClosed && ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          } catch (_) {}
+        }
+      }, 10000);
+
+      try {
+        // 2. Start Upload session
+        const startAckPromise = new Promise<void>((res, rej) => {
+          startAckResolver = { resolve: res, reject: rej };
+        });
+
+        ws.send(JSON.stringify({ type: 'start_upload', uploadId }));
+        await Promise.race([
+          startAckPromise,
+          new Promise((_, rej) => setTimeout(() => rej(new Error('start_upload timeout')), 10000))
+        ]);
+
+        // 3. CHUNK UPLOAD WITH EXPLICIT ACK FLOW CONTROL (BACKPRESSURE)
+        for (let i = 0; i < totalChunks; i++) {
+          if (isClosed) throw new Error('Upload cancelled or connection lost');
+
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(size, (i + 1) * CHUNK_SIZE);
+          const chunkBlob = fileOrBlob.slice(start, end);
+          const base64Data = await blobToBase64(chunkBlob);
+
+          let ackReceived = false;
+          let retries = 0;
+
+          while (!ackReceived && retries < 3) {
+            retries++;
+            const chunkAckPromise = new Promise<void>((res, rej) => {
+              ackResolverMap.set(i, { resolve: res, reject: rej });
+            });
+
+            ws.send(JSON.stringify({
+              type: 'upload_chunk',
+              uploadId,
+              chunkIndex: i,
+              totalChunks,
+              data: base64Data,
+            }));
+
+            try {
+              await Promise.race([
+                chunkAckPromise,
+                new Promise((_, rej) => setTimeout(() => rej(new Error(`Chunk ${i} ACK timeout`)), 15000))
+              ]);
+              ackReceived = true;
+            } catch (retryErr) {
+              ackResolverMap.delete(i);
+              if (retries >= 3) throw retryErr;
+              console.warn(`Retrying chunk ${i}/${totalChunks} (attempt ${retries + 1})...`);
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          }
+
+          const progress = Math.round(((i + 1) / totalChunks) * 75);
+          onProgress?.(progress);
+        }
+
+        // 4. Assemble and AI Process video
+        const completePromise = new Promise<any>((res, rej) => {
+          completeResolver = { resolve: res, reject: rej };
+        });
+
+        ws.send(JSON.stringify({
+          type: 'assemble_upload',
+          uploadId,
+          fileName,
+          totalChunks,
+          mimeType,
+        }));
+
+        onProgress?.(80);
+
+        const subtitles = await Promise.race([
+          completePromise,
+          new Promise((_, rej) => setTimeout(() => rej(new Error('AI video assembly processing timeout')), 180000))
+        ]);
+
+        onProgress?.(100);
+        cleanup();
+        resolve(subtitles);
+      } catch (err: any) {
+        cleanup();
+        reject(err);
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        // IMMEDIATE PONG HEARTBEAT HANDLING (NON-BLOCKING)
+        if (msg.type === 'pong') {
+          return;
+        }
+
+        if (msg.type === 'start_ack') {
+          if (startAckResolver) {
+            startAckResolver.resolve();
+            startAckResolver = null;
+          }
+          return;
+        }
+
+        // FLOW CONTROL ACK HANDLING
+        if (msg.type === 'chunk_ack') {
+          const chunkIdx = msg.chunkIndex;
+          const resolver = ackResolverMap.get(chunkIdx);
+          if (resolver) {
+            ackResolverMap.delete(chunkIdx);
+            if (msg.status === 'ok') {
+              resolver.resolve();
+            } else {
+              resolver.reject(new Error(msg.error || `Chunk ${chunkIdx} failed`));
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'upload_complete') {
+          if (completeResolver) {
+            completeResolver.resolve(msg.subtitles || []);
+            completeResolver = null;
+          }
+          return;
+        }
+
+        if (msg.type === 'upload_error') {
+          if (completeResolver) {
+            completeResolver.reject(new Error(msg.error || 'WebSocket assembly failed'));
+            completeResolver = null;
+          }
+          return;
+        }
+      } catch (_) {}
+    };
+
+    ws.onerror = (err) => {
+      console.warn('[WebSocket Upload Error]', err);
+      if (!isClosed) {
+        cleanup();
+        reject(new Error('WebSocket network error'));
+      }
+    };
+
+    ws.onclose = () => {
+      if (!isClosed) {
+        cleanup();
+        reject(new Error('WebSocket connection closed unexpectedly'));
+      }
+    };
+  });
+}
+
+/**
+ * Fallback HTTP Chunked Upload
+ */
+async function uploadVideoViaHttp(
   fileOrBlob: File | Blob,
   fileName: string = 'video.mp4',
   onProgress?: (progressPercent: number) => void
 ): Promise<any> {
   const size = fileOrBlob.size;
   const mimeType = fileOrBlob.type || 'video/mp4';
-  const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks for max reliability on all networks
+  const CHUNK_SIZE = 4 * 1024 * 1024;
 
-  // For small Files (< 12MB), direct upload is fast and avoids chunking overhead
   if (size <= 12 * 1024 * 1024 && fileOrBlob instanceof File) {
     const formData = new FormData();
     formData.append('video', fileOrBlob);
     onProgress?.(30);
-    
-    let response: Response;
-    try {
-      response = await fetchWithRetry('/api/translate-video', {
-        method: 'POST',
-        body: formData,
-      }, 5);
-    } catch (netErr: any) {
-      throw new Error("Unable to connect to the video processing server. Please check your network connection and try again.");
-    }
+
+    const response = await fetchWithRetry('/api/translate-video', {
+      method: 'POST',
+      body: formData,
+    }, 5);
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
@@ -80,7 +297,6 @@ export async function uploadAndTranslateVideo(
     return data.subtitles || [];
   }
 
-  // Chunked upload for larger files or fetched Blobs
   const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const totalChunks = Math.ceil(size / CHUNK_SIZE);
 
@@ -90,21 +306,15 @@ export async function uploadAndTranslateVideo(
     const chunk = fileOrBlob.slice(start, end);
 
     const formData = new FormData();
-    // MUST append text metadata BEFORE binary chunk file so Multer parses req.body before req.file
     formData.append('uploadId', uploadId);
     formData.append('chunkIndex', i.toString());
     formData.append('totalChunks', totalChunks.toString());
     formData.append('chunk', chunk, `${fileName}.part${i}`);
 
-    let chunkRes: Response;
-    try {
-      chunkRes = await fetchWithRetry('/api/upload-chunk', {
-        method: 'POST',
-        body: formData,
-      }, 8); // Retry up to 8 times per chunk
-    } catch (netErr) {
-      throw new Error(`Failed uploading chunk ${i + 1}/${totalChunks} after multiple retries. Please verify your internet connection.`);
-    }
+    const chunkRes = await fetchWithRetry('/api/upload-chunk', {
+      method: 'POST',
+      body: formData,
+    }, 8);
 
     if (!chunkRes.ok) {
       const errData = await chunkRes.json().catch(() => ({}));
@@ -117,22 +327,16 @@ export async function uploadAndTranslateVideo(
 
   onProgress?.(70);
 
-  // Ask backend to assemble chunks and run Gemini video translation
-  let processRes: Response;
-  try {
-    processRes = await fetchWithRetry('/api/process-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        uploadId,
-        fileName,
-        totalChunks,
-        mimeType,
-      }),
-    }, 5, 3000, 180000); // 3-minute timeout for processing complete video with AI
-  } catch (netErr) {
-    throw new Error("Network connection lost during video AI analysis. Please try again.");
-  }
+  const processRes = await fetchWithRetry('/api/process-video', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      uploadId,
+      fileName,
+      totalChunks,
+      mimeType,
+    }),
+  }, 5, 3000, 180000);
 
   if (!processRes.ok) {
     const errData = await processRes.json().catch(() => ({}));
@@ -142,4 +346,18 @@ export async function uploadAndTranslateVideo(
   onProgress?.(100);
   const data = await processRes.json();
   return data.subtitles || [];
+}
+
+export async function uploadAndTranslateVideo(
+  fileOrBlob: File | Blob,
+  fileName: string = 'video.mp4',
+  onProgress?: (progressPercent: number) => void
+): Promise<any> {
+  // First attempt WebSocket upload with flow control ACK and parallel heartbeat
+  try {
+    return await uploadVideoViaWebSocket(fileOrBlob, fileName, onProgress);
+  } catch (wsErr) {
+    console.warn('[WebSocket Upload Failed, falling back to HTTP chunking]', wsErr);
+    return await uploadVideoViaHttp(fileOrBlob, fileName, onProgress);
+  }
 }

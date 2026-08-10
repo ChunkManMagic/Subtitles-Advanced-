@@ -1,5 +1,7 @@
 import express from "express";
 import path from "path";
+import http from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { createServer as createViteServer } from "vite";
 import multer from "multer";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -65,6 +67,137 @@ async function hashFile(filePath: string): Promise<string> {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  const server = http.createServer(app);
+
+  // WebSocket Server for Chunked Uploads with Flow Control (ACK) & Non-Blocking Heartbeat
+  const wss = new WebSocketServer({ server, path: "/ws-upload" });
+
+  const wsHeartbeatInterval = setInterval(() => {
+    wss.clients.forEach((client: any) => {
+      if (client.isAlive === false) return client.terminate();
+      client.isAlive = false;
+      try {
+        client.ping();
+      } catch (_) {}
+    });
+  }, 15000);
+
+  wss.on('close', () => {
+    clearInterval(wsHeartbeatInterval);
+  });
+
+  wss.on('connection', (ws: any) => {
+    ws.isAlive = true;
+
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
+    ws.on('message', async (message: Buffer | string) => {
+      ws.isAlive = true;
+
+      let parsed: any = null;
+      try {
+        const str = message.toString('utf-8');
+        if (str.startsWith('{') && str.endsWith('}')) {
+          parsed = JSON.parse(str);
+        }
+      } catch (_) {}
+
+      // Non-blocking Heartbeat Ping/Pong (processed immediately outside queue)
+      if (parsed && parsed.type === 'ping') {
+        try {
+          ws.send(JSON.stringify({ type: 'pong' }));
+        } catch (_) {}
+        return;
+      }
+
+      if (!parsed) return;
+
+      if (parsed.type === 'start_upload') {
+        const { uploadId } = parsed;
+        if (uploadId) {
+          const chunkDir = path.join(tmpdir(), "video_chunks", uploadId);
+          if (!fs.existsSync(chunkDir)) {
+            fs.mkdirSync(chunkDir, { recursive: true });
+          }
+          try {
+            ws.send(JSON.stringify({ type: 'start_ack', uploadId, status: 'ok' }));
+          } catch (_) {}
+        }
+        return;
+      }
+
+      if (parsed.type === 'upload_chunk') {
+        const { uploadId, chunkIndex, data } = parsed;
+        if (!uploadId || chunkIndex === undefined || !data) {
+          try {
+            ws.send(JSON.stringify({ type: 'chunk_ack', uploadId, chunkIndex, status: 'error', error: 'Missing parameters' }));
+          } catch (_) {}
+          return;
+        }
+
+        try {
+          const chunkDir = path.join(tmpdir(), "video_chunks", uploadId);
+          if (!fs.existsSync(chunkDir)) {
+            fs.mkdirSync(chunkDir, { recursive: true });
+          }
+
+          const chunkPath = path.join(chunkDir, `chunk_${chunkIndex}`);
+          const buffer = Buffer.from(data, 'base64');
+          fs.writeFileSync(chunkPath, buffer);
+
+          // EXPLICIT ACK FOR FLOW CONTROL (BACKPRESSURE)
+          ws.send(JSON.stringify({ type: 'chunk_ack', uploadId, chunkIndex, status: 'ok' }));
+        } catch (err: any) {
+          console.error(`[WS Chunk Write Error] uploadId: ${uploadId}, chunk: ${chunkIndex}`, err);
+          try {
+            ws.send(JSON.stringify({ type: 'chunk_ack', uploadId, chunkIndex, status: 'error', error: err.message || 'Write failed' }));
+          } catch (_) {}
+        }
+        return;
+      }
+
+      if (parsed.type === 'assemble_upload') {
+        const { uploadId, fileName, totalChunks, mimeType } = parsed;
+        try {
+          const chunkDir = path.join(tmpdir(), "video_chunks", uploadId);
+          const assembledPath = path.join(tmpdir(), `assembled_${uploadId}_${fileName || 'video.mp4'}`);
+
+          if (fs.existsSync(assembledPath)) {
+            fs.unlinkSync(assembledPath);
+          }
+
+          for (let i = 0; i < totalChunks; i++) {
+            const chunkPath = path.join(chunkDir, `chunk_${i}`);
+            if (!fs.existsSync(chunkPath)) {
+              throw new Error(`Missing chunk index ${i}`);
+            }
+            const chunkBuffer = fs.readFileSync(chunkPath);
+            fs.appendFileSync(assembledPath, chunkBuffer);
+          }
+
+          try {
+            fs.rmSync(chunkDir, { recursive: true, force: true });
+          } catch (_) {}
+
+          const subtitles = await processVideoFile(assembledPath, mimeType || 'video/mp4', fileName);
+
+          if (fs.existsSync(assembledPath)) {
+            fs.unlinkSync(assembledPath);
+          }
+
+          ws.send(JSON.stringify({ type: 'upload_complete', uploadId, subtitles }));
+        } catch (err: any) {
+          console.error(`[WS Assembly Error] uploadId: ${uploadId}`, err);
+          try {
+            ws.send(JSON.stringify({ type: 'upload_error', uploadId, error: err.message || 'Processing failed' }));
+          } catch (_) {}
+        }
+        return;
+      }
+    });
+  });
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -496,7 +629,7 @@ Respond ONLY with the JSON array, nothing else. No markdown formatting.`;
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
 }
