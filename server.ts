@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import http from "http";
@@ -66,7 +67,7 @@ async function hashFile(filePath: string): Promise<string> {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const server = http.createServer(app);
 
   // WebSocket Server for Chunked Uploads with Flow Control (ACK) & Non-Blocking Heartbeat
