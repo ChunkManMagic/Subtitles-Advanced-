@@ -3,14 +3,25 @@ import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 
-// Read config from root directory
 const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+let firebaseConfig: any = null;
+try {
+  if (fs.existsSync(configPath)) {
+    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (parsed.apiKey && parsed.apiKey !== 'YOUR_API_KEY_HERE') {
+      firebaseConfig = parsed;
+    }
+  }
+} catch (e) {
+  console.warn('Could not load firebase-applet-config.json', e);
+}
+
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+export const db = app ? getFirestore(app, firebaseConfig.firestoreDatabaseId) : null;
 
 export async function getCachedSubtitles(videoId: string) {
+  if (!db) return null;
   try {
     const docRef = doc(db, 'processed_videos', videoId);
     const docSnap = await getDoc(docRef);
@@ -25,6 +36,7 @@ export async function getCachedSubtitles(videoId: string) {
 }
 
 export async function cacheSubtitles(videoId: string, subtitles: any[]) {
+  if (!db) return;
   try {
     const docRef = doc(db, 'processed_videos', videoId);
     await setDoc(docRef, {
