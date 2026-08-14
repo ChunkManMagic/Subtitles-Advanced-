@@ -238,8 +238,8 @@ export function ExportVideoModal({ isOpen, onClose }: ExportVideoModalProps) {
         ctx.font = `bold ${fontSizePx}px sans-serif`;
 
         // Position calculation
-        let yPos = (height * subtitleStyleSettings.yOffsetPercent) / 100;
-        let xPos = (width * subtitleStyleSettings.xOffsetPercent) / 100;
+        const yPos = (height * subtitleStyleSettings.yOffsetPercent) / 100;
+        const xPos = (width * subtitleStyleSettings.xOffsetPercent) / 100;
 
         ctx.textAlign = subtitleStyleSettings.alignment || 'center';
         ctx.textBaseline = 'middle';
